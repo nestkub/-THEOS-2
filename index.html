@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE HTML>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -10,13 +10,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
 
-<!-- Sphere Map API -->
-<script type="text/javascript" src="https://api.sphere.gistda.or.th/map/?key=25DE0A16A23841D888E95BF6ABC52759"></script>
-
-<style>
+<style type="text/css">
   :root {
     --bg: #0f0f10;
     --surface: #1a1a1e;
@@ -38,12 +34,19 @@
     box-sizing: border-box;
   }
 
-  html, body {
+  html {
+    height: 100%;
+  }
+
+  body {
+    margin: 0px;
     height: 100%;
     background: var(--bg);
     color: var(--text);
     font-family: 'Prompt', 'Inter', sans-serif;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* ========== HEADER ========== */
@@ -52,9 +55,10 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 24px;
-    background: var(--surface);
+    background: linear-gradient(135deg, rgba(26, 26, 30, 0.95), rgba(10, 15, 16, 0.95));
     border-bottom: 1px solid var(--border);
     z-index: 100;
+    backdrop-filter: blur(10px);
   }
 
   .brand {
@@ -72,6 +76,7 @@
     align-items: center;
     justify-content: center;
     font-size: 18px;
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
   }
 
   .brand h1 {
@@ -103,11 +108,13 @@
     border-radius: 50%;
     background: var(--warning);
     animation: pulse 2s infinite;
+    box-shadow: 0 0 10px rgba(255, 165, 2, 0.5);
   }
 
   .dot.active {
     background: var(--success);
     animation: none;
+    box-shadow: 0 0 10px rgba(46, 213, 115, 0.6);
   }
 
   @keyframes pulse {
@@ -118,23 +125,23 @@
   /* ========== MAIN LAYOUT ========== */
   .container {
     display: flex;
-    height: calc(100vh - 60px);
+    flex: 1;
     gap: 12px;
     padding: 12px;
+    min-height: 0;
   }
 
   #map {
     flex: 1;
+    height: 100%;
     border-radius: 12px;
-    background: var(--surface);
+    background: linear-gradient(180deg, #0a0e12 0%, #1a1a1e 100%),
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill="white" opacity="0.6"/><circle cx="250" cy="200" r="0.8" fill="white" opacity="0.4"/><circle cx="400" cy="150" r="1.2" fill="white" opacity="0.7"/><circle cx="600" cy="300" r="0.6" fill="white" opacity="0.5"/><circle cx="800" cy="250" r="1" fill="white" opacity="0.6"/><circle cx="1000" cy="350" r="0.8" fill="white" opacity="0.4"/><circle cx="150" cy="500" r="1.1" fill="white" opacity="0.65"/><circle cx="900" cy="600" r="0.9" fill="white" opacity="0.5"/><circle cx="500" cy="700" r="1" fill="white" opacity="0.55"/><circle cx="1100" cy="100" r="0.7" fill="white" opacity="0.45"/></svg>');
+    background-size: cover;
+    background-position: center;
     border: 1px solid var(--border);
     overflow: hidden;
     position: relative;
-  }
-
-  #map-placeholder {
-    width: 100%;
-    height: 100%;
   }
 
   /* ========== SIDEBAR ========== */
@@ -147,11 +154,13 @@
   }
 
   .card {
-    background: var(--surface);
+    background: linear-gradient(135deg, rgba(26, 26, 30, 0.9), rgba(42, 42, 47, 0.7));
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 16px;
     flex-shrink: 0;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
 
   .card h2 {
@@ -162,6 +171,7 @@
     color: var(--accent);
     margin-bottom: 12px;
     font-family: 'Prompt', sans-serif;
+    text-shadow: 0 0 10px rgba(0, 217, 255, 0.3);
   }
 
   .card h3 {
@@ -180,7 +190,7 @@
     align-items: center;
     font-size: 13px;
     padding: 8px 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(51, 51, 51, 0.5);
     font-family: 'Prompt', sans-serif;
   }
 
@@ -196,6 +206,7 @@
     font-family: 'JetBrains Mono', monospace;
     color: var(--accent);
     font-weight: 600;
+    text-shadow: 0 0 8px rgba(0, 217, 255, 0.4);
   }
 
   .risk-badge {
@@ -208,24 +219,28 @@
     width: 100%;
     text-align: center;
     font-family: 'Prompt', sans-serif;
+    backdrop-filter: blur(5px);
   }
 
   .risk-low {
-    background: rgba(46, 213, 115, 0.2);
+    background: rgba(46, 213, 115, 0.15);
     color: var(--success);
-    border: 1px solid rgba(46, 213, 115, 0.3);
+    border: 1px solid rgba(46, 213, 115, 0.4);
+    box-shadow: 0 0 12px rgba(46, 213, 115, 0.2);
   }
 
   .risk-medium {
-    background: rgba(255, 165, 2, 0.2);
+    background: rgba(255, 165, 2, 0.15);
     color: var(--warning);
-    border: 1px solid rgba(255, 165, 2, 0.3);
+    border: 1px solid rgba(255, 165, 2, 0.4);
+    box-shadow: 0 0 12px rgba(255, 165, 2, 0.2);
   }
 
   .risk-high {
-    background: rgba(255, 71, 87, 0.2);
+    background: rgba(255, 71, 87, 0.15);
     color: var(--danger);
-    border: 1px solid rgba(255, 71, 87, 0.3);
+    border: 1px solid rgba(255, 71, 87, 0.4);
+    box-shadow: 0 0 12px rgba(255, 71, 87, 0.2);
   }
 
   /* ========== BUTTONS ========== */
@@ -233,30 +248,33 @@
     width: 100%;
     padding: 10px 12px;
     margin-top: 8px;
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
     color: var(--bg);
     border: none;
     border-radius: 8px;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s;
     font-family: 'Prompt', sans-serif;
+    box-shadow: 0 4px 15px rgba(0, 217, 255, 0.3);
   }
 
   button:hover {
-    background: var(--accent-dark);
     transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 217, 255, 0.4);
   }
 
   button.secondary {
     background: transparent;
     color: var(--accent);
     border: 1px solid var(--accent);
+    box-shadow: none;
   }
 
   button.secondary:hover {
     background: rgba(0, 217, 255, 0.1);
+    box-shadow: 0 0 12px rgba(0, 217, 255, 0.3);
   }
 
   /* ========== WEATHER WIDGET ========== */
@@ -268,11 +286,12 @@
   }
 
   .weather-item {
-    background: var(--surface-light);
-    border: 1px solid var(--border);
+    background: rgba(42, 42, 47, 0.6);
+    border: 1px solid rgba(51, 51, 51, 0.6);
     border-radius: 8px;
     padding: 10px;
     text-align: center;
+    backdrop-filter: blur(5px);
   }
 
   .weather-icon {
@@ -285,6 +304,7 @@
     font-size: 14px;
     font-weight: 600;
     color: var(--accent);
+    text-shadow: 0 0 8px rgba(0, 217, 255, 0.3);
   }
 
   .weather-label {
@@ -306,8 +326,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    background: var(--surface-light);
-    border: 1px solid var(--border);
+    background: rgba(42, 42, 47, 0.6);
+    border: 1px solid rgba(51, 51, 51, 0.6);
     border-radius: 8px;
     color: var(--text);
     text-decoration: none;
@@ -316,12 +336,14 @@
     cursor: pointer;
     transition: all 0.2s;
     font-family: 'Prompt', sans-serif;
+    backdrop-filter: blur(5px);
   }
 
   .link-button:hover {
-    background: var(--border);
+    background: rgba(0, 217, 255, 0.1);
     border-color: var(--accent);
     color: var(--accent);
+    box-shadow: 0 0 12px rgba(0, 217, 255, 0.2);
   }
 
   .link-button span {
@@ -350,7 +372,7 @@
   }
 
   .sidebar::-webkit-scrollbar-thumb {
-    background: var(--border);
+    background: rgba(51, 51, 51, 0.8);
     border-radius: 3px;
   }
 
@@ -395,12 +417,219 @@
     }
   }
 </style>
+
+<script type="text/javascript" src="https://api.sphere.gistda.or.th/map/?key=25DE0A16A23841D888E95BF6ABC52759"></script>
+
+<script>
+  var map;
+  let coralGeoJSON = null;
+  let lastClicked = null;
+  let weatherData = null;
+
+  function init() {
+    map = new sphere.Map({
+      placeholder: document.getElementById('map')
+    });
+
+    if (map.Event) {
+      map.Event.bind(sphere.EventName.Ready, onMapReady);
+    }
+  }
+
+  function onMapReady() {
+    console.log("✅ Sphere Map Ready");
+    document.getElementById("status-dot").classList.add("active");
+    loadCoralLayer();
+    bindMapClick();
+    fetchWeather();
+  }
+
+  async function loadCoralLayer() {
+    try {
+      const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?" +
+                  "service=WFS&version=1.0.0&request=GetFeature" +
+                  "&typename=geonode:coral_reefs_thailand_2020" +
+                  "&outputFormat=application/json&srs=EPSG:4326";
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("WFS Error");
+      
+      coralGeoJSON = await res.json();
+
+      if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
+        const gl = map.Renderer;
+        
+        if (!gl.getSource("coral")) {
+          gl.addSource("coral", {
+            type: "geojson",
+            data: coralGeoJSON
+          });
+
+          gl.addLayer({
+            id: "coral-fill",
+            type: "fill",
+            source: "coral",
+            paint: {
+              "fill-color": "#ff6b9d",
+              "fill-opacity": 0.3
+            }
+          });
+
+          gl.addLayer({
+            id: "coral-line",
+            type: "line",
+            source: "coral",
+            paint: {
+              "line-color": "#ff6b9d",
+              "line-width": 2
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Coral layer error:", err);
+    }
+  }
+
+  function bindMapClick() {
+    if (!map || !map.Renderer) return;
+
+    map.Renderer.on('click', (e) => {
+      const { lng, lat } = e.lngLat;
+      lastClicked = [lng, lat];
+
+      document.getElementById("stat-lat").textContent = lat.toFixed(4);
+      document.getElementById("stat-lng").textContent = lng.toFixed(4);
+
+      if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
+        const point = turf.point([lng, lat]);
+        let minDist = Infinity;
+
+        coralGeoJSON.features.forEach(f => {
+          try {
+            const centroid = turf.centroid(f);
+            const d = turf.distance(point, centroid, { units: "kilometers" });
+            minDist = Math.min(minDist, d);
+          } catch (_) {}
+        });
+
+        if (isFinite(minDist)) {
+          document.getElementById("stat-distance").textContent = minDist.toFixed(2) + " km";
+          calculateRisk(minDist);
+        }
+      }
+
+      addMarker(lng, lat);
+    });
+  }
+
+  function addMarker(lng, lat) {
+    if (!map || !map.Renderer) return;
+
+    const id = "marker-" + Date.now();
+    try {
+      map.Renderer.addSource(id, {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [lng, lat] }
+        }
+      });
+
+      map.Renderer.addLayer({
+        id,
+        type: "circle",
+        source: id,
+        paint: {
+          "circle-radius": 8,
+          "circle-color": "#00d9ff",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#0f0f10"
+        }
+      });
+    } catch (err) {
+      console.warn("Marker error:", err);
+    }
+  }
+
+  async function fetchWeather() {
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=9.14&longitude=100.79&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl&timezone=Asia/Bangkok`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const current = data.current;
+
+      weatherData = current;
+
+      document.getElementById("temp").textContent = Math.round(current.temperature_2m) + "°C";
+      document.getElementById("humidity").textContent = current.relative_humidity_2m + "%";
+      document.getElementById("wind").textContent = Math.round(current.wind_speed_10m) + " km/h";
+      document.getElementById("pressure").textContent = Math.round(current.pressure_msl) + " hPa";
+
+      calculateRisk();
+    } catch (err) {
+      console.warn("Weather error:", err);
+    }
+  }
+
+  function calculateRisk(coralDist = null) {
+    let score = 0;
+
+    if (coralDist !== null && coralDist !== undefined) {
+      if (coralDist < 2) score += 40;
+      else if (coralDist < 8) score += 20;
+      else score += 5;
+    }
+
+    if (weatherData) {
+      if (weatherData.wind_speed_10m > 20) score += 30;
+      else if (weatherData.wind_speed_10m > 10) score += 15;
+
+      if (weatherData.relative_humidity_2m > 85) score += 15;
+      else if (weatherData.relative_humidity_2m > 70) score += 8;
+
+      if (weatherData.pressure_msl < 1000) score += 25;
+    }
+
+    let riskTH = "ต่ำ";
+    let riskEN = "Low";
+    let badge = document.getElementById("risk-badge");
+    badge.className = "risk-badge risk-low";
+
+    if (score >= 50) {
+      riskTH = "สูงมาก";
+      riskEN = "High";
+      badge.className = "risk-badge risk-high";
+    } else if (score >= 30) {
+      riskTH = "ปานกลาง";
+      riskEN = "Medium";
+      badge.className = "risk-badge risk-medium";
+    }
+
+    badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/100`;
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    if (document.getElementById("btn-reset")) {
+      document.getElementById("btn-reset").addEventListener("click", () => {
+        lastClicked = null;
+        document.getElementById("stat-lat").textContent = "—";
+        document.getElementById("stat-lng").textContent = "—";
+        document.getElementById("stat-distance").textContent = "—";
+        document.getElementById("risk-badge").textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
+        document.getElementById("risk-badge").className = "risk-badge risk-low";
+      });
+    }
+  });
+</script>
+
 </head>
-<body>
+<body onload="init();">
 
 <header>
   <div class="brand">
-    <div class="brand-icon">🌊</div>
+    <div class="brand-icon">🛰️</div>
     <div>
       <h1>THEOS-2</h1>
       <p>ระบบวิเคราะห์ปะการัง | Coral Analytics Platform</p>
@@ -413,9 +642,7 @@
 </header>
 
 <div class="container">
-  <div id="map">
-    <div id="map-placeholder"></div>
-  </div>
+  <div id="map"></div>
 
   <div class="sidebar">
     <!-- Card 1: Location & Risk -->
@@ -495,251 +722,6 @@
     </div>
   </div>
 </div>
-
-<script>
-/* ========== CONFIG ========== */
-const CONFIG = {
-  MAP_CENTER_LAT: 9.14,
-  MAP_CENTER_LNG: 100.79,
-  MAP_ZOOM: 11,
-  WEATHER_LAT: 9.14,
-  WEATHER_LNG: 100.79
-};
-
-let map, coralGeoJSON = null, lastClicked = null;
-let weatherData = null;
-let coralMarkers = [];
-
-/* ========== 1) INIT MAP WITH SPHERE ========== */
-function initMap() {
-  if (typeof sphere === "undefined") {
-    console.error("❌ Sphere API not loaded");
-    return;
-  }
-
-  try {
-    map = new sphere.Map({
-      placeholder: document.getElementById('map-placeholder'),
-      center: new sphere.LatLng(CONFIG.MAP_CENTER_LAT, CONFIG.MAP_CENTER_LNG),
-      zoom: CONFIG.MAP_ZOOM
-    });
-
-    map.Event.bind(sphere.EventName.Ready, () => {
-      console.log("✅ Sphere Map Ready");
-      document.getElementById("status-dot").classList.add("active");
-      loadCoralLayer();
-      bindMapClick();
-      fetchWeather();
-    });
-  } catch (err) {
-    console.error("❌ Map initialization error:", err);
-  }
-}
-
-/* ========== 2) LOAD CORAL DATA FROM WFS ========== */
-async function loadCoralLayer() {
-  try {
-    const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?" +
-                "service=WFS&version=1.0.0&request=GetFeature" +
-                "&typename=geonode:coral_reefs_thailand_2020" +
-                "&outputFormat=application/json&srs=EPSG:4326";
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("WFS Error: " + res.status);
-    
-    coralGeoJSON = await res.json();
-
-    if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
-      const gl = map.Renderer;
-      
-      // Add coral source
-      if (!gl.getSource("coral")) {
-        gl.addSource("coral", {
-          type: "geojson",
-          data: coralGeoJSON
-        });
-
-        // Add fill layer
-        gl.addLayer({
-          id: "coral-fill",
-          type: "fill",
-          source: "coral",
-          paint: {
-            "fill-color": "#ff6b9d",
-            "fill-opacity": 0.3
-          }
-        });
-
-        // Add line layer
-        gl.addLayer({
-          id: "coral-line",
-          type: "line",
-          source: "coral",
-          paint: {
-            "line-color": "#ff6b9d",
-            "line-width": 2
-          }
-        });
-      }
-
-      console.log("✅ Coral layer loaded:", coralGeoJSON.features.length, "features");
-    }
-  } catch (err) {
-    console.warn("⚠️ Coral layer error:", err);
-  }
-}
-
-/* ========== 3) MAP CLICK HANDLER ========== */
-function bindMapClick() {
-  if (!map || !map.Renderer) return;
-
-  map.Renderer.on('click', (e) => {
-    const { lng, lat } = e.lngLat;
-    lastClicked = [lng, lat];
-
-    document.getElementById("stat-lat").textContent = lat.toFixed(4);
-    document.getElementById("stat-lng").textContent = lng.toFixed(4);
-
-    // Calculate distance to coral
-    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
-      const point = turf.point([lng, lat]);
-      let minDist = Infinity;
-
-      coralGeoJSON.features.forEach(f => {
-        try {
-          const centroid = turf.centroid(f);
-          const d = turf.distance(point, centroid, { units: "kilometers" });
-          minDist = Math.min(minDist, d);
-        } catch (_) {}
-      });
-
-      if (isFinite(minDist)) {
-        document.getElementById("stat-distance").textContent = minDist.toFixed(2) + " km";
-        calculateRisk(minDist);
-      }
-    }
-
-    // Add marker to map
-    addMarker(lng, lat);
-  });
-}
-
-function addMarker(lng, lat) {
-  if (!map || !map.Renderer) return;
-
-  const id = "marker-" + Date.now();
-  try {
-    map.Renderer.addSource(id, {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [lng, lat] }
-      }
-    });
-
-    map.Renderer.addLayer({
-      id,
-      type: "circle",
-      source: id,
-      paint: {
-        "circle-radius": 8,
-        "circle-color": "#00d9ff",
-        "circle-stroke-width": 2,
-        "circle-stroke-color": "#0f0f10"
-      }
-    });
-
-    coralMarkers.push(id);
-  } catch (err) {
-    console.warn("Marker error:", err);
-  }
-}
-
-/* ========== 4) FETCH WEATHER ========== */
-async function fetchWeather() {
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.WEATHER_LAT}&longitude=${CONFIG.WEATHER_LNG}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl&timezone=Asia/Bangkok`;
-
-    const res = await fetch(url);
-    const data = await res.json();
-    const current = data.current;
-
-    weatherData = current;
-
-    document.getElementById("temp").textContent = Math.round(current.temperature_2m) + "°C";
-    document.getElementById("humidity").textContent = current.relative_humidity_2m + "%";
-    document.getElementById("wind").textContent = Math.round(current.wind_speed_10m) + " km/h";
-    document.getElementById("pressure").textContent = Math.round(current.pressure_msl) + " hPa";
-
-    calculateRisk();
-    console.log("✅ Weather data loaded");
-  } catch (err) {
-    console.warn("⚠️ Weather error:", err);
-  }
-}
-
-/* ========== 5) CALCULATE RISK ========== */
-function calculateRisk(coralDist = null) {
-  let score = 0;
-
-  if (coralDist !== null && coralDist !== undefined) {
-    if (coralDist < 2) score += 40;
-    else if (coralDist < 8) score += 20;
-    else score += 5;
-  }
-
-  if (weatherData) {
-    if (weatherData.wind_speed_10m > 20) score += 30;
-    else if (weatherData.wind_speed_10m > 10) score += 15;
-
-    if (weatherData.relative_humidity_2m > 85) score += 15;
-    else if (weatherData.relative_humidity_2m > 70) score += 8;
-
-    if (weatherData.pressure_msl < 1000) score += 25;
-  }
-
-  let riskTH = "ต่ำ";
-  let riskEN = "Low";
-  let badge = document.getElementById("risk-badge");
-  badge.className = "risk-badge risk-low";
-
-  if (score >= 50) {
-    riskTH = "สูงมาก";
-    riskEN = "High";
-    badge.className = "risk-badge risk-high";
-  } else if (score >= 30) {
-    riskTH = "ปานกลาง";
-    riskEN = "Medium";
-    badge.className = "risk-badge risk-medium";
-  }
-
-  badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/100`;
-}
-
-/* ========== 6) RESET ========== */
-document.getElementById("btn-reset").addEventListener("click", () => {
-  lastClicked = null;
-  document.getElementById("stat-lat").textContent = "—";
-  document.getElementById("stat-lng").textContent = "—";
-  document.getElementById("stat-distance").textContent = "—";
-  document.getElementById("risk-badge").textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
-  document.getElementById("risk-badge").className = "risk-badge risk-low";
-
-  // Remove all markers
-  if (map && map.Renderer) {
-    coralMarkers.forEach(id => {
-      try {
-        map.Renderer.removeLayer(id);
-        map.Renderer.removeSource(id);
-      } catch (_) {}
-    });
-  }
-  coralMarkers = [];
-});
-
-/* ========== START ========== */
-window.addEventListener("load", initMap);
-</script>
 
 </body>
 </html>
