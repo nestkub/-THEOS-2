@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>หอคอยดักน้ำจืด — วิเคราะห์แนวปะการัง x สภาพอากาศ x กระแสน้ำ (THEOS-2)</title>
+<title>THEOS-2 Coral Analytics</title>
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%234FD9C9'/></svg>">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
@@ -15,556 +17,677 @@
 <script src="https://api.sphere.gistda.or.th/map/?key=25DE0A16A23841D888E95BF6ABC52759"></script>
 
 <style>
-  :root{
-    --bg:#0A1A1F;
-    --panel:rgba(14,36,42,.92);
-    --panel-border:rgba(79,209,197,.16);
-    --text:#E7F3F0;
-    --text-muted:#7FA6A0;
-    --teal:#3FBFB0;
-    --teal-bright:#4FD9C9;
-    --coral:#FF6B4A;
-    --coral-soft:rgba(255,107,74,.16);
-    --freshwater:#4A9EFF;
-    --warning:#FFB800;
-    --danger:#FF4757;
-    --font-display:'Space Grotesk',sans-serif;
-    --font-body:'IBM Plex Sans Thai','Space Grotesk',sans-serif;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
-  body{
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--font-body);
-    display:flex;flex-direction:column;
+  :root {
+    --bg: #0f0f10;
+    --surface: #1a1a1e;
+    --surface-light: #2a2a2f;
+    --border: #333;
+    --text: #fafafa;
+    --text-muted: #b0b0b0;
+    --accent: #00d9ff;
+    --accent-dark: #00b8d4;
+    --danger: #ff4757;
+    --warning: #ffa502;
+    --success: #2ed573;
   }
 
-  /* ---------- Header ---------- */
-  header{
-    display:flex;align-items:center;gap:14px;
-    padding:14px 20px;
-    background:linear-gradient(180deg,#0D2126,#0A1A1F);
-    border-bottom:1px solid var(--panel-border);
-    z-index:20;
-    flex-wrap:wrap;
-  }
-  .logo{width:30px;height:30px;flex:none}
-  header h1{
-    font-family:var(--font-display);
-    font-size:16px;font-weight:600;margin:0;letter-spacing:.2px;
-  }
-  header p{margin:2px 0 0;font-size:12px;color:var(--text-muted)}
-  .title-block{flex:1;min-width:200px}
-
-  .salinity-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted)}
-  .salinity-bar{
-    width:120px;height:6px;border-radius:3px;
-    background:linear-gradient(90deg,var(--freshwater),var(--teal-bright));
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
   }
 
-  /* ---------- Layout ---------- */
-  .layout{flex:1;display:flex;min-height:0;gap:10px;padding:10px}
-  #map{flex:1;position:relative;background:#08171B;border-radius:8px;overflow:hidden}
-  #map-status{
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    text-align:center;padding:24px;background:#08171B;color:var(--text-muted);
-    font-size:13px;line-height:1.7;z-index:5;
-  }
-  #map-status code{color:var(--coral);background:var(--coral-soft);padding:2px 6px;border-radius:4px}
-
-  .sidebar{
-    display:flex;gap:10px;flex-direction:column;
-    width:300px;flex:none;overflow-y:auto;
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
   }
 
-  aside{
-    background:var(--panel);border:1px solid var(--panel-border);
-    border-radius:8px;padding:14px;
-    overflow-y:auto;
-    max-height:400px;
+  /* ========== HEADER ========== */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
   }
 
-  #weather-widget{
-    background:var(--panel);border:1px solid var(--panel-border);
-    border-radius:8px;padding:12px;
-    font-size:12px;
-    max-height:200px;overflow-y:auto;
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
 
-  .panel{
-    border:1px solid var(--panel-border);border-radius:8px;
-    padding:12px;margin-bottom:10px;background:rgba(255,255,255,.02);
-    font-size:12px;
+  .brand-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent), #ff6b9d);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--bg);
   }
-  .panel h2{
-    font-family:var(--font-display);font-size:11px;font-weight:600;
-    text-transform:uppercase;letter-spacing:.6px;color:var(--teal-bright);
-    margin:0 0 8px;
-  }
-  .panel h3{
-    font-family:var(--font-display);font-size:10px;font-weight:600;
-    text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);
-    margin:6px 0 4px;
-  }
-  .layer-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px}
-  .layer-row input{accent-color:var(--teal)}
-  .swatch{width:8px;height:8px;border-radius:3px;flex:none}
-  .hint{font-size:11px;color:var(--text-muted);line-height:1.5;margin:6px 0 0}
 
-  button{
-    font-family:var(--font-body);font-size:11px;font-weight:500;
-    background:var(--teal);color:#04211E;border:none;border-radius:6px;
-    padding:6px 10px;cursor:pointer;width:100%;margin-top:6px;
+  .brand h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
   }
-  button:hover{background:var(--teal-bright)}
-  button.secondary{background:transparent;border:1px solid var(--panel-border);color:var(--text)}
 
-  .stat{display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px dashed var(--panel-border)}
-  .stat:last-child{border-bottom:none}
-  .stat span:last-child{font-family:var(--font-display);color:var(--coral)}
-
-  .risk-badge{
-    display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600;
-    margin-top:4px;
+  .brand p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
   }
-  .risk-high{background:rgba(255,71,87,.3);color:#FF4757}
-  .risk-medium{background:rgba(255,184,0,.3);color:#FFB800}
-  .risk-low{background:rgba(63,191,176,.3);color:#3FBFB0}
 
-  /* ---------- Bottom widgets ---------- */
-  .widget-container{
-    flex:none;height:160px;border-top:1px solid var(--panel-border);
-    background:var(--panel);padding:10px;
-    display:flex;gap:10px;overflow-x:auto;
-    border-radius:8px;
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
   }
-  .widget-item{
-    flex:0 0 250px;border:1px solid var(--panel-border);border-radius:6px;
-    padding:10px;background:rgba(255,255,255,.02);overflow:hidden;
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--warning);
+    animation: pulse 2s infinite;
   }
-  .widget-item h3{margin:0 0 6px;font-size:11px;color:var(--teal-bright)}
-  .widget-item iframe{width:100%;height:100%;border:none}
-  .widget-status{font-size:10px;color:var(--text-muted);padding:10px;text-align:center}
 
-  #trend-chart{width:100%;height:80px}
+  .dot.active {
+    background: var(--success);
+    animation: none;
+  }
 
-  @media (max-width:1024px){
-    .layout{flex-direction:column}
-    .sidebar{width:100%;max-height:300px;flex-direction:row;overflow-x:auto}
-    aside{flex:1;min-width:250px}
-    #weather-widget{flex:1;min-width:250px}
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ========== MAIN LAYOUT ========== */
+  .container {
+    display: flex;
+    height: calc(100vh - 60px);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  #map {
+    flex: 1;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    position: relative;
+  }
+
+  #map-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 13px;
+    z-index: 10;
+  }
+
+  /* ========== SIDEBAR ========== */
+  .sidebar {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    flex-shrink: 0;
+  }
+
+  .card h2 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .card h3 {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 10px 0 6px;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-row:last-child {
+    border-bottom: none;
+  }
+
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .risk-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 8px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .risk-low {
+    background: rgba(46, 213, 115, 0.2);
+    color: var(--success);
+    border: 1px solid rgba(46, 213, 115, 0.3);
+  }
+
+  .risk-medium {
+    background: rgba(255, 165, 2, 0.2);
+    color: var(--warning);
+    border: 1px solid rgba(255, 165, 2, 0.3);
+  }
+
+  .risk-high {
+    background: rgba(255, 71, 87, 0.2);
+    color: var(--danger);
+    border: 1px solid rgba(255, 71, 87, 0.3);
+  }
+
+  /* ========== BUTTONS ========== */
+  button {
+    width: 100%;
+    padding: 10px 12px;
+    margin-top: 8px;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  button:hover {
+    background: var(--accent-dark);
+    transform: translateY(-2px);
+  }
+
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  button.secondary:hover {
+    background: rgba(0, 217, 255, 0.1);
+  }
+
+  /* ========== WEATHER WIDGET ========== */
+  .weather-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .weather-item {
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .weather-icon {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+
+  .weather-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .weather-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ========== LINKS SECTION ========== */
+  .quick-links {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .link-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .link-button:hover {
+    background: var(--border);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .link-button span {
+    font-size: 14px;
+  }
+
+  /* ========== SCROLLBAR ========== */
+  .sidebar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  .sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 1024px) {
+    .container {
+      flex-direction: column;
+    }
+
+    .sidebar {
+      width: 100%;
+      max-height: 250px;
+      flex-direction: row;
+      overflow-x: auto;
+    }
+
+    .card {
+      flex: 1;
+      min-width: 280px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    header {
+      padding: 12px 16px;
+    }
+
+    .brand h1 {
+      font-size: 16px;
+    }
+
+    .card {
+      padding: 12px;
+    }
+
+    .card h2 {
+      font-size: 11px;
+    }
   }
 </style>
 </head>
 <body>
 
 <header>
-  <svg class="logo" viewBox="0 0 32 32" fill="none">
-    <path d="M4 24c4-10 8-6 10-14 2 8 6 4 10 14" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="16" cy="26" r="2" fill="#4FD9C9"/>
-  </svg>
-  <div class="title-block">
-    <h1>🌊 หอคอยดักน้ำจืด — วิเคราะห์สภาพแวดล้อม</h1>
-    <p>ปะการัง × สภาพอากาศ × กระแสน้ำ (เกาะสมุย) | ดาวเทียม THEOS-2</p>
+  <div class="brand">
+    <div class="brand-icon">🌊</div>
+    <div>
+      <h1>THEOS-2</h1>
+      <p>Coral Reef Analysis Platform</p>
+    </div>
   </div>
-  <div class="salinity-legend">
-    <span>น้ำจืด</span><div class="salinity-bar"></div><span>น้ำทะเล</span>
+  <div class="status-indicator">
+    <span>Live</span>
+    <div class="dot" id="status-dot"></div>
   </div>
 </header>
 
-<div class="layout">
+<div class="container">
   <div id="map">
-    <div id="map-status">
-      กำลังโหลดแผนที่…<br><br>
-      ตรวจสอบการเชื่อมต่อ Sphere Map API
-    </div>
+    <div id="map-status">⏳ Loading map...</div>
   </div>
 
   <div class="sidebar">
-    <aside>
-      <div class="panel">
-        <h2>📍 ปะการัง (Coral Reef)</h2>
-        <label class="layer-row">
-          <input type="checkbox" id="toggle-coral" checked>
-          <span class="swatch" style="background:var(--coral)"></span>
-          แนวปะการัง (Dataset 1216)
-        </label>
-        <p class="hint">Dataset: Marine Portal Coral Reefs Thailand</p>
+    <!-- Card 1: Location & Risk -->
+    <div class="card">
+      <h2>📍 Location</h2>
+      <div class="stat-row">
+        <span>Latitude</span>
+        <span class="stat-value" id="stat-lat">—</span>
       </div>
-
-      <div class="panel">
-        <h2>📌 จุดที่เลือก</h2>
-        <div class="stat"><span>พิกัด</span><span id="stat-coord">—</span></div>
-        <div class="stat"><span>ระยะถึงปะการัง</span><span id="stat-distance">—</span></div>
-        <div class="stat"><span>ความเสี่ยง</span><span id="stat-risk">—</span></div>
-        <button id="btn-reset" class="secondary">ล้างจุด</button>
+      <div class="stat-row">
+        <span>Longitude</span>
+        <span class="stat-value" id="stat-lng">—</span>
       </div>
-
-      <div class="panel">
-        <h2>⚠️ ระดับความเสี่ยงรวม</h2>
-        <div id="combined-risk"></div>
-        <p class="hint" id="risk-details">คลิกบนแผนที่เพื่อวิเคราะห์</p>
+      <div class="stat-row">
+        <span>Distance to Coral</span>
+        <span class="stat-value" id="stat-distance">—</span>
       </div>
-    </aside>
+      <div class="risk-badge risk-low" id="risk-badge">
+        Risk: Low
+      </div>
+      <button class="secondary" id="btn-reset">Clear</button>
+    </div>
 
-    <div id="weather-widget">
-      <div class="panel">
-        <h2>🌬️ สภาพอากาศเกาะสมุย (Live)</h2>
-        <div id="weather-data" class="widget-status">
-          กำลังโหลด...
+    <!-- Card 2: Weather -->
+    <div class="card">
+      <h2>🌦️ Weather</h2>
+      <div class="weather-grid" id="weather-grid">
+        <div class="weather-item">
+          <div class="weather-icon">🌡️</div>
+          <div class="weather-value" id="temp">—</div>
+          <div class="weather-label">Temp</div>
+        </div>
+        <div class="weather-item">
+          <div class="weather-icon">💧</div>
+          <div class="weather-value" id="humidity">—</div>
+          <div class="weather-label">Humidity</div>
+        </div>
+        <div class="weather-item">
+          <div class="weather-icon">🌬️</div>
+          <div class="weather-value" id="wind">—</div>
+          <div class="weather-label">Wind</div>
+        </div>
+        <div class="weather-item">
+          <div class="weather-icon">📊</div>
+          <div class="weather-value" id="pressure">—</div>
+          <div class="weather-label">Pressure</div>
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<div class="widget-container">
-  <div class="widget-item">
-    <h3>🌍 Windy (ลม, ความกดอากาศ, CAPE)</h3>
-    <div class="widget-status">
-      <a href="https://www.windy.com/9.14/100.79/4?pressure" target="_blank" style="color:var(--teal)">
-        เปิด Windy Maps →
-      </a>
+    <!-- Card 3: Quick Links -->
+    <div class="card">
+      <h2>🔗 Data Sources</h2>
+      <div class="quick-links">
+        <a href="https://www.windy.com/9.14/100.79/4?pressure" target="_blank" class="link-button">
+          <span>🌬️ Windy</span> →
+        </a>
+        <a href="https://thaiwater.net" target="_blank" class="link-button">
+          <span>💧 ThaiWater</span> →
+        </a>
+        <a href="https://earth.nullschool.net/" target="_blank" class="link-button">
+          <span>🌍 Earth</span> →
+        </a>
+      </div>
     </div>
-  </div>
-
-  <div class="widget-item">
-    <h3>💧 ThaiWater (ระดับน้ำ, ฝน)</h3>
-    <div class="widget-status">
-      <a href="https://thaiwater.net" target="_blank" style="color:var(--teal)">
-        เปิด ThaiWater.net →
-      </a>
-    </div>
-  </div>
-
-  <div class="widget-item">
-    <h3>🌬️ Earth (ลม + กระแสน้ำ Real-time)</h3>
-    <div class="widget-status">
-      <a href="https://earth.nullschool.net/" target="_blank" style="color:var(--teal)">
-        เปิด Earth Nullschool →
-      </a>
-    </div>
-  </div>
-
-  <div class="widget-item">
-    <h3>📈 แนวโน้มความเสี่ยง</h3>
-    <canvas id="trend-chart"></canvas>
   </div>
 </div>
 
 <script>
-/* ============================================================
-   CONFIG
-   ============================================================ */
+/* ========== CONFIG ========== */
 const CONFIG = {
-  MAP_CENTER: { lat: 9.14, lng: 100.79 },   // เกาะสมุย
+  MAP_CENTER: { lat: 9.14, lng: 100.79 },
   MAP_ZOOM: 11,
-  
-  // Marine GI Portal WFS - Dataset 1216 Coral Reefs
-  MARINE_WFS_BASE: "https://portal.marineportal.gistda.or.th/geoserver/ows",
-  CORAL_TYPENAME: "geonode:coral_reefs_thailand_2020",  // ชื่อ layer จากดาวเทียม 1216
-  
-  // Weather APIs
   WEATHER_LAT: 9.14,
-  WEATHER_LNG: 100.79,
-  
-  // Thailand Water Data
-  THAIWATER_STATION: "khaosamui"  // สถานีเกาะสมุย
+  WEATHER_LNG: 100.79
 };
 
 let map, coralGeoJSON = null, lastClicked = null;
-let riskData = {
-  coral: null,
-  weather: null,
-  water: null,
-  wind: null
-};
+let weatherData = null;
+let chartInstance = null;
 
-/* ---------- 1) เริ่มแผนที่ ---------- */
-function init(){
+/* ========== 1) INIT MAP ========== */
+function initMap() {
   if (typeof sphere === "undefined") {
-    document.getElementById("map-status").innerHTML =
-      "❌ ไม่พบ Sphere SDK — ตรวจสอบ API Key";
+    document.getElementById("map-status").innerHTML = "❌ Map API Error";
     return;
   }
 
-  map = new sphere.Map({
-    placeholder: document.getElementById("map"),
-    center: new sphere.LatLng(CONFIG.MAP_CENTER.lat, CONFIG.MAP_CENTER.lng),
-    zoom: CONFIG.MAP_ZOOM
-  });
+  try {
+    map = new sphere.Map({
+      placeholder: document.getElementById("map"),
+      center: new sphere.LatLng(CONFIG.MAP_CENTER.lat, CONFIG.MAP_CENTER.lng),
+      zoom: CONFIG.MAP_ZOOM
+    });
 
-  map.Event.bind(sphere.EventName.Ready, () => {
-    document.getElementById("map-status").style.display = "none";
-    loadCoralLayer();
-    bindMapClick();
-    fetchWeatherData();
-    initChart();
-  });
-}
-
-/* ---------- 2) โหลดแนวปะการัง ---------- */
-async function loadCoralLayer(){
-  const url = `${CONFIG.MARINE_WFS_BASE}?service=WFS&version=1.0.0&request=GetFeature`
-            + `&typename=${encodeURIComponent(CONFIG.CORAL_TYPENAME)}`
-            + `&outputFormat=application/json&srs=EPSG:4326`;
-  try{
-    const res = await fetch(url);
-    if(!res.ok) throw new Error("HTTP " + res.status);
-    coralGeoJSON = await res.json();
-
-    const gl = map.Renderer;
-    if (!gl.getSource("coral")) {
-      gl.addSource("coral", { type: "geojson", data: coralGeoJSON });
-      gl.addLayer({
-        id: "coral-fill", type: "fill", source: "coral",
-        paint: { "fill-color": "#FF6B4A", "fill-opacity": 0.35 }
-      });
-      gl.addLayer({
-        id: "coral-line", type: "line", source: "coral",
-        paint: { "line-color": "#FF6B4A", "line-width": 1.5 }
-      });
-    }
-  }catch(err){
-    console.warn("⚠️ โหลดปะการังไม่สำเร็จ:", err);
+    map.Event.bind(sphere.EventName.Ready, () => {
+      document.getElementById("map-status").style.display = "none";
+      document.getElementById("status-dot").classList.add("active");
+      loadCoralLayer();
+      bindMapClick();
+      fetchWeather();
+    });
+  } catch (err) {
+    console.error("Map error:", err);
+    document.getElementById("map-status").innerHTML = "⚠️ Map unavailable";
   }
 }
 
-/* ---------- 3) คลิกแผนที่ = ปักจุด + คำนวณความเสี่ยง ---------- */
-function bindMapClick(){
+/* ========== 2) LOAD CORAL DATA ========== */
+async function loadCoralLayer() {
+  try {
+    const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?" +
+                "service=WFS&version=1.0.0&request=GetFeature" +
+                "&typename=geonode:coral_reefs_thailand_2020" +
+                "&outputFormat=application/json&srs=EPSG:4326";
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("WFS Error");
+    
+    coralGeoJSON = await res.json();
+
+    if (map && map.Renderer && coralGeoJSON.features) {
+      const gl = map.Renderer;
+      
+      if (!gl.getSource("coral")) {
+        gl.addSource("coral", {
+          type: "geojson",
+          data: coralGeoJSON
+        });
+
+        gl.addLayer({
+          id: "coral-fill",
+          type: "fill",
+          source: "coral",
+          paint: {
+            "fill-color": "#ff6b9d",
+            "fill-opacity": 0.3
+          }
+        });
+
+        gl.addLayer({
+          id: "coral-line",
+          type: "line",
+          source: "coral",
+          paint: {
+            "line-color": "#ff6b9d",
+            "line-width": 2
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Coral layer error:", err);
+  }
+}
+
+/* ========== 3) MAP CLICK ========== */
+function bindMapClick() {
+  if (!map || !map.Renderer) return;
+
   map.Renderer.on("click", (e) => {
     const { lng, lat } = e.lngLat;
     lastClicked = [lng, lat];
-    
-    document.getElementById("stat-coord").textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
-    // คำนวณระยะปะการัง
-    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length){
+    document.getElementById("stat-lat").textContent = lat.toFixed(4);
+    document.getElementById("stat-lng").textContent = lng.toFixed(4);
+
+    // Calculate distance to coral
+    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
       const point = turf.point([lng, lat]);
       let minDist = Infinity;
+
       coralGeoJSON.features.forEach(f => {
-        try{
+        try {
           const centroid = turf.centroid(f);
           const d = turf.distance(point, centroid, { units: "kilometers" });
-          if (d < minDist) minDist = d;
-        }catch(_){}
+          minDist = Math.min(minDist, d);
+        } catch (_) {}
       });
-      
-      if (isFinite(minDist)){
-        riskData.coral = minDist;
-        document.getElementById("stat-distance").textContent = minDist.toFixed(2) + " กม.";
+
+      if (isFinite(minDist)) {
+        document.getElementById("stat-distance").textContent = minDist.toFixed(2) + " km";
+        calculateRisk(minDist);
       }
     }
 
-    calculateCombinedRisk();
-    addMarkerToMap(lng, lat);
+    // Add marker
+    addMarker(lng, lat);
   });
 }
 
-function addMarkerToMap(lng, lat){
+function addMarker(lng, lat) {
+  if (!map || !map.Renderer) return;
+
   const id = "marker-" + Date.now();
-  const gl = map.Renderer;
-  try{
-    gl.addSource(id, {
+  try {
+    map.Renderer.addSource(id, {
       type: "geojson",
-      data: { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] } }
+      data: {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [lng, lat] }
+      }
     });
-    gl.addLayer({
-      id, type: "circle", source: id,
-      paint: { "circle-radius": 8, "circle-color": "#4A9EFF", "circle-stroke-width": 2, "circle-stroke-color": "#08171B" }
+
+    map.Renderer.addLayer({
+      id,
+      type: "circle",
+      source: id,
+      paint: {
+        "circle-radius": 8,
+        "circle-color": "#00d9ff",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#0f0f10"
+      }
     });
-  }catch(_){}
+  } catch (_) {}
 }
 
-/* ---------- 4) ดึงข้อมูลสภาพอากาศ (Open-Meteo API - ฟรี) ---------- */
-async function fetchWeatherData(){
-  try{
-    // Open-Meteo Weather API (ฟรี ไม่ต้อง API Key)
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.WEATHER_LAT}&longitude=${CONFIG.WEATHER_LNG}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl&timezone=Asia/Bangkok`;
-    
+/* ========== 4) FETCH WEATHER ========== */
+async function fetchWeather() {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.WEATHER_LAT}&longitude=${CONFIG.WEATHER_LNG}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl&timezone=Asia/Bangkok`;
+
     const res = await fetch(url);
     const data = await res.json();
     const current = data.current;
-    
-    riskData.weather = {
-      temp: current.temperature_2m,
-      humidity: current.relative_humidity_2m,
-      windSpeed: current.wind_speed_10m,
-      pressure: current.pressure_msl
-    };
-    
-    const html = `
-      🌡️ อุณหภูมิ: ${current.temperature_2m}°C<br>
-      💧 ความชื้น: ${current.relative_humidity_2m}%<br>
-      🌬️ ลม: ${current.wind_speed_10m} km/h<br>
-      📊 ความกดอากาศ: ${current.pressure_msl} hPa
-    `;
-    
-    document.getElementById("weather-data").innerHTML = html;
-    calculateCombinedRisk();
-  }catch(err){
-    console.warn("⚠️ ดึงข้อมูลอากาศไม่สำเร็จ:", err);
-    document.getElementById("weather-data").innerHTML = "❌ ไม่สามารถดึงข้อมูล";
+
+    weatherData = current;
+
+    document.getElementById("temp").textContent = Math.round(current.temperature_2m) + "°C";
+    document.getElementById("humidity").textContent = current.relative_humidity_2m + "%";
+    document.getElementById("wind").textContent = Math.round(current.wind_speed_10m) + " km/h";
+    document.getElementById("pressure").textContent = Math.round(current.pressure_msl) + " hPa";
+
+    calculateRisk();
+  } catch (err) {
+    console.warn("Weather error:", err);
   }
 }
 
-/* ---------- 5) คำนวณระดับความเสี่ยงรวม ---------- */
-function calculateCombinedRisk(){
-  let riskScore = 0;
-  let riskFactors = [];
+/* ========== 5) CALCULATE RISK ========== */
+function calculateRisk(coralDist = null) {
+  let score = 0;
 
-  // ปัจจัย 1: ระยะปะการัง (ถ้ามี)
-  if (riskData.coral !== null){
-    if (riskData.coral < 2) {
-      riskScore += 40;
-      riskFactors.push("🔴 ใกล้ปะการังมาก (<2 กม.)");
-    } else if (riskData.coral < 8) {
-      riskScore += 20;
-      riskFactors.push("🟡 อยู่ในบริเวณปะการัง (2-8 กม.)");
-    } else {
-      riskScore += 5;
-      riskFactors.push("🟢 ห่างจากปะการัง (>8 กม.)");
-    }
+  if (coralDist !== null && coralDist !== undefined) {
+    if (coralDist < 2) score += 40;
+    else if (coralDist < 8) score += 20;
+    else score += 5;
   }
 
-  // ปัจจัย 2: ความเร็วลม (อิทธิพลต่อกระแสน้ำ)
-  if (riskData.weather && riskData.weather.windSpeed){
-    const wind = riskData.weather.windSpeed;
-    if (wind > 20) {
-      riskScore += 30;
-      riskFactors.push("🔴 ลมแรง (>20 km/h) ⚡");
-    } else if (wind > 10) {
-      riskScore += 15;
-      riskFactors.push("🟡 ลมปานกลาง (10-20 km/h)");
-    }
+  if (weatherData) {
+    if (weatherData.wind_speed_10m > 20) score += 30;
+    else if (weatherData.wind_speed_10m > 10) score += 15;
+
+    if (weatherData.relative_humidity_2m > 85) score += 15;
+    else if (weatherData.relative_humidity_2m > 70) score += 8;
+
+    if (weatherData.pressure_msl < 1000) score += 25;
   }
 
-  // ปัจจัย 3: ความชื้นสูง = โอกาสฝนตก
-  if (riskData.weather && riskData.weather.humidity){
-    const humidity = riskData.weather.humidity;
-    if (humidity > 85) {
-      riskScore += 15;
-      riskFactors.push("🔴 ความชื้นสูงมาก (>85%) 🌧️");
-    } else if (humidity > 70) {
-      riskScore += 8;
-      riskFactors.push("🟡 ความชื้นสูง (70-85%)");
-    }
+  let risk = "Low";
+  let badge = document.getElementById("risk-badge");
+  badge.className = "risk-badge risk-low";
+
+  if (score >= 50) {
+    risk = "High";
+    badge.className = "risk-badge risk-high";
+  } else if (score >= 30) {
+    risk = "Medium";
+    badge.className = "risk-badge risk-medium";
   }
 
-  // ปัจจัย 4: ความกดอากาศต่ำ = พายุ
-  if (riskData.weather && riskData.weather.pressure){
-    const pressure = riskData.weather.pressure;
-    if (pressure < 1000) {
-      riskScore += 25;
-      riskFactors.push("🔴 ความกดอากาศต่ำ (<1000 hPa) ⚠️");
-    }
-  }
-
-  // แสดงผลลัพธ์
-  let riskLevel = "ต่ำ 🟢";
-  let riskClass = "risk-low";
-  
-  if (riskScore >= 50) {
-    riskLevel = "สูงมาก 🔴";
-    riskClass = "risk-high";
-  } else if (riskScore >= 30) {
-    riskLevel = "ปานกลาง-สูง 🟠";
-    riskClass = "risk-medium";
-  }
-
-  document.getElementById("stat-risk").textContent = riskLevel;
-  document.getElementById("combined-risk").innerHTML = `
-    <div class="risk-badge ${riskClass}">
-      คะแนนความเสี่ยง: ${riskScore}/100
-    </div>
-  `;
-  
-  document.getElementById("risk-details").innerHTML = 
-    "<strong>ปัจจัย:</strong><br>" + 
-    (riskFactors.length > 0 ? riskFactors.join("<br>") : "ยังไม่มีข้อมูล");
+  badge.textContent = `Risk: ${risk} • Score: ${score}/100`;
 }
 
-/* ---------- 6) ล้างจุด ---------- */
+/* ========== 6) RESET ========== */
 document.getElementById("btn-reset").addEventListener("click", () => {
   lastClicked = null;
-  ["stat-coord","stat-distance","stat-risk"].forEach(id => 
-    document.getElementById(id).textContent = "—"
-  );
-  document.getElementById("combined-risk").innerHTML = "";
-  document.getElementById("risk-details").innerHTML = "คลิกบนแผนที่เพื่อวิเคราะห์";
-  riskData = { coral: null, weather: null, water: null, wind: null };
+  document.getElementById("stat-lat").textContent = "—";
+  document.getElementById("stat-lng").textContent = "—";
+  document.getElementById("stat-distance").textContent = "—";
+  document.getElementById("risk-badge").textContent = "Risk: Low";
+  document.getElementById("risk-badge").className = "risk-badge risk-low";
 });
 
-/* ---------- 7) Toggle Layer ---------- */
-document.getElementById("toggle-coral").addEventListener("change", (e) => {
-  if (!map || !map.Renderer.getLayer("coral-fill")) return;
-  const v = e.target.checked ? "visible" : "none";
-  map.Renderer.setLayoutProperty("coral-fill", "visibility", v);
-  map.Renderer.setLayoutProperty("coral-line", "visibility", v);
-});
-
-/* ---------- 8) กราฟแนวโน้มความเสี่ยง ---------- */
-function initChart(){
-  new Chart(document.getElementById("trend-chart"), {
-    type: "line",
-    data: {
-      labels: ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."],
-      datasets: [
-        {
-          label: "ลม (km/h)",
-          data: [12,11,13,15,18,22,25,24,20,16,13,11],
-          borderColor: "#4A9EFF",
-          backgroundColor: "rgba(74,158,255,.1)",
-          tension: 0.3,
-          fill: true,
-          pointRadius: 2,
-          yAxisID: 'y'
-        },
-        {
-          label: "ความเสี่ยง (%)",
-          data: [20,18,22,25,30,35,40,38,32,26,22,19],
-          borderColor: "#FF6B4A",
-          backgroundColor: "rgba(255,107,74,.1)",
-          tension: 0.3,
-          fill: true,
-          pointRadius: 2,
-          yAxisID: 'y1'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: "#7FA6A0", font: { size: 9 } }
-        }
-      },
-      scales: {
-        y: {
-          type: 'linear',
-          display: true,
-          position: 'left',
-          title: { display: true, text: 'ลม (km/h)', color: '#4A9EFF' },
-          ticks: { color: "#7FA6A0", font: { size: 9 } },
-          grid: { color: "rgba(255,255,255,.04)" }
-        },
-        y1: {
-          type: 'linear',
-          display: true,
-          position: 'right',
-          title: { display: true, text: 'ความเสี่ยง (%)', color: '#FF6B4A' },
-          ticks: { color: "#7FA6A0", font: { size: 9 } },
-          grid: { drawOnChartArea: false }
-        }
-      }
-    }
-  });
-}
-
-window.addEventListener("load", init);
+/* ========== START ========== */
+window.addEventListener("load", initMap);
 </script>
+
 </body>
 </html>
