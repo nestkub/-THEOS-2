@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%234FD9C9'/></svg>">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
@@ -29,6 +29,7 @@
     --danger: #ff4757;
     --warning: #ffa502;
     --success: #2ed573;
+    --pink: #ff6b9d;
   }
 
   * {
@@ -41,7 +42,7 @@
     height: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: 'Inter', sans-serif;
+    font-family: 'Prompt', 'Inter', sans-serif;
     overflow: hidden;
   }
 
@@ -63,28 +64,28 @@
   }
 
   .brand-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    background: linear-gradient(135deg, var(--accent), #ff6b9d);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--pink));
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--bg);
+    font-size: 18px;
   }
 
   .brand h1 {
     font-size: 18px;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: -0.5px;
+    font-family: 'Prompt', sans-serif;
   }
 
   .brand p {
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 2px;
+    font-family: 'Prompt', sans-serif;
   }
 
   .status-indicator {
@@ -93,6 +94,7 @@
     gap: 8px;
     font-size: 12px;
     color: var(--text-muted);
+    font-family: 'Prompt', sans-serif;
   }
 
   .dot {
@@ -145,7 +147,7 @@
 
   /* ========== SIDEBAR ========== */
   .sidebar {
-    width: 320px;
+    width: 340px;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -162,11 +164,12 @@
 
   .card h2 {
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: var(--accent);
     margin-bottom: 12px;
+    font-family: 'Prompt', sans-serif;
   }
 
   .card h3 {
@@ -176,6 +179,7 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin: 10px 0 6px;
+    font-family: 'Prompt', sans-serif;
   }
 
   .stat-row {
@@ -185,10 +189,15 @@
     font-size: 13px;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
+    font-family: 'Prompt', sans-serif;
   }
 
   .stat-row:last-child {
     border-bottom: none;
+  }
+
+  .stat-label {
+    color: var(--text-muted);
   }
 
   .stat-value {
@@ -199,13 +208,14 @@
 
   .risk-badge {
     display: inline-block;
-    padding: 6px 12px;
-    border-radius: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
     font-size: 11px;
     font-weight: 600;
     margin-top: 8px;
     width: 100%;
     text-align: center;
+    font-family: 'Prompt', sans-serif;
   }
 
   .risk-low {
@@ -239,7 +249,7 @@
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Prompt', sans-serif;
   }
 
   button:hover {
@@ -289,6 +299,7 @@
     font-size: 10px;
     color: var(--text-muted);
     margin-top: 2px;
+    font-family: 'Prompt', sans-serif;
   }
 
   /* ========== LINKS SECTION ========== */
@@ -312,6 +323,7 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;
+    font-family: 'Prompt', sans-serif;
   }
 
   .link-button:hover {
@@ -322,6 +334,18 @@
 
   .link-button span {
     font-size: 14px;
+  }
+
+  .link-button-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .link-label {
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   /* ========== SCROLLBAR ========== */
@@ -350,7 +374,7 @@
 
     .sidebar {
       width: 100%;
-      max-height: 250px;
+      max-height: 280px;
       flex-direction: row;
       overflow-x: auto;
     }
@@ -387,81 +411,93 @@
     <div class="brand-icon">🌊</div>
     <div>
       <h1>THEOS-2</h1>
-      <p>Coral Reef Analysis Platform</p>
+      <p>ระบบวิเคราะห์ปะการัง | Coral Analytics Platform</p>
     </div>
   </div>
   <div class="status-indicator">
-    <span>Live</span>
+    <span>ใช้งาน Live</span>
     <div class="dot" id="status-dot"></div>
   </div>
 </header>
 
 <div class="container">
   <div id="map">
-    <div id="map-status">⏳ Loading map...</div>
+    <div id="map-status">⏳ กำลังโหลดแผนที่... Loading map...</div>
   </div>
 
   <div class="sidebar">
     <!-- Card 1: Location & Risk -->
     <div class="card">
-      <h2>📍 Location</h2>
+      <h2>📍 ตำแหน่ง | Location</h2>
       <div class="stat-row">
-        <span>Latitude</span>
+        <span class="stat-label">ละติจูด | Latitude</span>
         <span class="stat-value" id="stat-lat">—</span>
       </div>
       <div class="stat-row">
-        <span>Longitude</span>
+        <span class="stat-label">ลองจิจูด | Longitude</span>
         <span class="stat-value" id="stat-lng">—</span>
       </div>
       <div class="stat-row">
-        <span>Distance to Coral</span>
+        <span class="stat-label">ระยะถึงปะการัง | Distance to Coral</span>
         <span class="stat-value" id="stat-distance">—</span>
       </div>
       <div class="risk-badge risk-low" id="risk-badge">
-        Risk: Low
+        ความเสี่ยง: ต่ำ | Risk: Low
       </div>
-      <button class="secondary" id="btn-reset">Clear</button>
+      <button class="secondary" id="btn-reset">ล้างข้อมูล | Clear</button>
     </div>
 
     <!-- Card 2: Weather -->
     <div class="card">
-      <h2>🌦️ Weather</h2>
+      <h2>🌦️ สภาพอากาศ | Weather</h2>
       <div class="weather-grid" id="weather-grid">
         <div class="weather-item">
           <div class="weather-icon">🌡️</div>
           <div class="weather-value" id="temp">—</div>
-          <div class="weather-label">Temp</div>
+          <div class="weather-label">อุณหภูมิ | Temperature</div>
         </div>
         <div class="weather-item">
           <div class="weather-icon">💧</div>
           <div class="weather-value" id="humidity">—</div>
-          <div class="weather-label">Humidity</div>
+          <div class="weather-label">ความชื้น | Humidity</div>
         </div>
         <div class="weather-item">
           <div class="weather-icon">🌬️</div>
           <div class="weather-value" id="wind">—</div>
-          <div class="weather-label">Wind</div>
+          <div class="weather-label">ลม | Wind Speed</div>
         </div>
         <div class="weather-item">
           <div class="weather-icon">📊</div>
           <div class="weather-value" id="pressure">—</div>
-          <div class="weather-label">Pressure</div>
+          <div class="weather-label">ความกดอากาศ | Pressure</div>
         </div>
       </div>
     </div>
 
     <!-- Card 3: Quick Links -->
     <div class="card">
-      <h2>🔗 Data Sources</h2>
+      <h2>🔗 ข้อมูลเพิ่มเติม | Data Sources</h2>
       <div class="quick-links">
         <a href="https://www.windy.com/9.14/100.79/4?pressure" target="_blank" class="link-button">
-          <span>🌬️ Windy</span> →
+          <div class="link-button-text">
+            <span>🌬️ Windy</span>
+            <span class="link-label">ลม ความกดอากาศ | Wind & Pressure</span>
+          </div>
+          <span>→</span>
         </a>
         <a href="https://thaiwater.net" target="_blank" class="link-button">
-          <span>💧 ThaiWater</span> →
+          <div class="link-button-text">
+            <span>💧 ThaiWater</span>
+            <span class="link-label">ระดับน้ำ ฝน | Water Level & Rain</span>
+          </div>
+          <span>→</span>
         </a>
         <a href="https://earth.nullschool.net/" target="_blank" class="link-button">
-          <span>🌍 Earth</span> →
+          <div class="link-button-text">
+            <span>🌍 Earth</span>
+            <span class="link-label">ลม กระแสน้ำ | Wind & Currents</span>
+          </div>
+          <span>→</span>
         </a>
       </div>
     </div>
@@ -479,12 +515,11 @@ const CONFIG = {
 
 let map, coralGeoJSON = null, lastClicked = null;
 let weatherData = null;
-let chartInstance = null;
 
 /* ========== 1) INIT MAP ========== */
 function initMap() {
   if (typeof sphere === "undefined") {
-    document.getElementById("map-status").innerHTML = "❌ Map API Error";
+    document.getElementById("map-status").innerHTML = "❌ ไม่สามารถโหลด Map API | Map API Error";
     return;
   }
 
@@ -504,7 +539,7 @@ function initMap() {
     });
   } catch (err) {
     console.error("Map error:", err);
-    document.getElementById("map-status").innerHTML = "⚠️ Map unavailable";
+    document.getElementById("map-status").innerHTML = "⚠️ ไม่สามารถใช้แผนที���ได้ | Map unavailable";
   }
 }
 
@@ -660,19 +695,22 @@ function calculateRisk(coralDist = null) {
     if (weatherData.pressure_msl < 1000) score += 25;
   }
 
-  let risk = "Low";
+  let riskTH = "ต่ำ";
+  let riskEN = "Low";
   let badge = document.getElementById("risk-badge");
   badge.className = "risk-badge risk-low";
 
   if (score >= 50) {
-    risk = "High";
+    riskTH = "สูงมาก";
+    riskEN = "High";
     badge.className = "risk-badge risk-high";
   } else if (score >= 30) {
-    risk = "Medium";
+    riskTH = "ปานกลาง";
+    riskEN = "Medium";
     badge.className = "risk-badge risk-medium";
   }
 
-  badge.textContent = `Risk: ${risk} • Score: ${score}/100`;
+  badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/100`;
 }
 
 /* ========== 6) RESET ========== */
@@ -681,7 +719,7 @@ document.getElementById("btn-reset").addEventListener("click", () => {
   document.getElementById("stat-lat").textContent = "—";
   document.getElementById("stat-lng").textContent = "—";
   document.getElementById("stat-distance").textContent = "—";
-  document.getElementById("risk-badge").textContent = "Risk: Low";
+  document.getElementById("risk-badge").textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
   document.getElementById("risk-badge").className = "risk-badge risk-low";
 });
 
