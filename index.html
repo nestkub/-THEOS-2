@@ -14,7 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
 
 <!-- Sphere Map API -->
-<script src="https://api.sphere.gistda.or.th/map/?key=25DE0A16A23841D888E95BF6ABC52759"></script>
+<script type="text/javascript" src="https://api.sphere.gistda.or.th/map/?key=25DE0A16A23841D888E95BF6ABC52759"></script>
 
 <style>
   :root {
@@ -132,17 +132,9 @@
     position: relative;
   }
 
-  #map-status {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    background: var(--surface);
-    color: var(--text-muted);
-    font-size: 13px;
-    z-index: 10;
+  #map-placeholder {
+    width: 100%;
+    height: 100%;
   }
 
   /* ========== SIDEBAR ========== */
@@ -422,7 +414,7 @@
 
 <div class="container">
   <div id="map">
-    <div id="map-status">⏳ กำลังโหลดแผนที่... Loading map...</div>
+    <div id="map-placeholder"></div>
   </div>
 
   <div class="sidebar">
@@ -507,7 +499,8 @@
 <script>
 /* ========== CONFIG ========== */
 const CONFIG = {
-  MAP_CENTER: { lat: 9.14, lng: 100.79 },
+  MAP_CENTER_LAT: 9.14,
+  MAP_CENTER_LNG: 100.79,
   MAP_ZOOM: 11,
   WEATHER_LAT: 9.14,
   WEATHER_LNG: 100.79
@@ -515,35 +508,35 @@ const CONFIG = {
 
 let map, coralGeoJSON = null, lastClicked = null;
 let weatherData = null;
+let coralMarkers = [];
 
-/* ========== 1) INIT MAP ========== */
+/* ========== 1) INIT MAP WITH SPHERE ========== */
 function initMap() {
   if (typeof sphere === "undefined") {
-    document.getElementById("map-status").innerHTML = "❌ ไม่สามารถโหลด Map API | Map API Error";
+    console.error("❌ Sphere API not loaded");
     return;
   }
 
   try {
     map = new sphere.Map({
-      placeholder: document.getElementById("map"),
-      center: new sphere.LatLng(CONFIG.MAP_CENTER.lat, CONFIG.MAP_CENTER.lng),
+      placeholder: document.getElementById('map-placeholder'),
+      center: new sphere.LatLng(CONFIG.MAP_CENTER_LAT, CONFIG.MAP_CENTER_LNG),
       zoom: CONFIG.MAP_ZOOM
     });
 
     map.Event.bind(sphere.EventName.Ready, () => {
-      document.getElementById("map-status").style.display = "none";
+      console.log("✅ Sphere Map Ready");
       document.getElementById("status-dot").classList.add("active");
       loadCoralLayer();
       bindMapClick();
       fetchWeather();
     });
   } catch (err) {
-    console.error("Map error:", err);
-    document.getElementById("map-status").innerHTML = "⚠️ ไม่สามารถใช้แผนที���ได้ | Map unavailable";
+    console.error("❌ Map initialization error:", err);
   }
 }
 
-/* ========== 2) LOAD CORAL DATA ========== */
+/* ========== 2) LOAD CORAL DATA FROM WFS ========== */
 async function loadCoralLayer() {
   try {
     const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?" +
@@ -552,19 +545,21 @@ async function loadCoralLayer() {
                 "&outputFormat=application/json&srs=EPSG:4326";
 
     const res = await fetch(url);
-    if (!res.ok) throw new Error("WFS Error");
+    if (!res.ok) throw new Error("WFS Error: " + res.status);
     
     coralGeoJSON = await res.json();
 
-    if (map && map.Renderer && coralGeoJSON.features) {
+    if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
       const gl = map.Renderer;
       
+      // Add coral source
       if (!gl.getSource("coral")) {
         gl.addSource("coral", {
           type: "geojson",
           data: coralGeoJSON
         });
 
+        // Add fill layer
         gl.addLayer({
           id: "coral-fill",
           type: "fill",
@@ -575,6 +570,7 @@ async function loadCoralLayer() {
           }
         });
 
+        // Add line layer
         gl.addLayer({
           id: "coral-line",
           type: "line",
@@ -585,17 +581,19 @@ async function loadCoralLayer() {
           }
         });
       }
+
+      console.log("✅ Coral layer loaded:", coralGeoJSON.features.length, "features");
     }
   } catch (err) {
-    console.warn("Coral layer error:", err);
+    console.warn("⚠️ Coral layer error:", err);
   }
 }
 
-/* ========== 3) MAP CLICK ========== */
+/* ========== 3) MAP CLICK HANDLER ========== */
 function bindMapClick() {
   if (!map || !map.Renderer) return;
 
-  map.Renderer.on("click", (e) => {
+  map.Renderer.on('click', (e) => {
     const { lng, lat } = e.lngLat;
     lastClicked = [lng, lat];
 
@@ -621,7 +619,7 @@ function bindMapClick() {
       }
     }
 
-    // Add marker
+    // Add marker to map
     addMarker(lng, lat);
   });
 }
@@ -650,7 +648,11 @@ function addMarker(lng, lat) {
         "circle-stroke-color": "#0f0f10"
       }
     });
-  } catch (_) {}
+
+    coralMarkers.push(id);
+  } catch (err) {
+    console.warn("Marker error:", err);
+  }
 }
 
 /* ========== 4) FETCH WEATHER ========== */
@@ -670,8 +672,9 @@ async function fetchWeather() {
     document.getElementById("pressure").textContent = Math.round(current.pressure_msl) + " hPa";
 
     calculateRisk();
+    console.log("✅ Weather data loaded");
   } catch (err) {
-    console.warn("Weather error:", err);
+    console.warn("⚠️ Weather error:", err);
   }
 }
 
@@ -721,6 +724,17 @@ document.getElementById("btn-reset").addEventListener("click", () => {
   document.getElementById("stat-distance").textContent = "—";
   document.getElementById("risk-badge").textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
   document.getElementById("risk-badge").className = "risk-badge risk-low";
+
+  // Remove all markers
+  if (map && map.Renderer) {
+    coralMarkers.forEach(id => {
+      try {
+        map.Renderer.removeLayer(id);
+        map.Renderer.removeSource(id);
+      } catch (_) {}
+    });
+  }
+  coralMarkers = [];
 });
 
 /* ========== START ========== */
