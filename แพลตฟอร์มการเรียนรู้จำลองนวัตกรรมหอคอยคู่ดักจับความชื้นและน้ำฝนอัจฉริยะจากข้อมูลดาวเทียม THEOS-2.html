@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>หอคอยดักน้ำจืด — วิเคราะห์แนวปะการัง x แนวโน้มน้ำจืด (THEOS-2)</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+
+<!-- ============================================================
+     TODO: ใส่ Sphere API Key ของคุณแทน [YOUR-KEY-API]
+     สมัครฟรีที่ https://sphere.gistda.or.th/
+     ============================================================ -->
+<script src="https://api.sphere.gistda.or.th/map/?key=[YOUR-KEY-API]"></script>
+
+<style>
+  :root{
+    --bg:#0A1A1F;
+    --panel:rgba(14,36,42,.92);
+    --panel-border:rgba(79,209,197,.16);
+    --text:#E7F3F0;
+    --text-muted:#7FA6A0;
+    --teal:#3FBFB0;
+    --teal-bright:#4FD9C9;
+    --coral:#FF6B4A;
+    --coral-soft:rgba(255,107,74,.16);
+    --freshwater:#4A9EFF;
+    --font-display:'Space Grotesk',sans-serif;
+    --font-body:'IBM Plex Sans Thai','Space Grotesk',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    display:flex;flex-direction:column;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 20px;
+    background:linear-gradient(180deg,#0D2126,#0A1A1F);
+    border-bottom:1px solid var(--panel-border);
+    z-index:20;
+  }
+  .logo{width:30px;height:30px;flex:none}
+  header h1{
+    font-family:var(--font-display);
+    font-size:16px;font-weight:600;margin:0;letter-spacing:.2px;
+  }
+  header p{margin:2px 0 0;font-size:12px;color:var(--text-muted)}
+  .title-block{flex:1;min-width:0}
+
+  /* gradient legend: น้ำจืด -> น้ำทะเล (องค์ประกอบเฉพาะเรื่อง) */
+  .salinity-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted)}
+  .salinity-bar{
+    width:120px;height:6px;border-radius:3px;
+    background:linear-gradient(90deg,var(--freshwater),var(--teal-bright));
+  }
+
+  /* ---------- Layout ---------- */
+  .layout{flex:1;display:flex;min-height:0}
+  #map{flex:1;position:relative;background:#08171B}
+  #map-status{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    text-align:center;padding:24px;background:#08171B;color:var(--text-muted);
+    font-size:13px;line-height:1.7;z-index:5;
+  }
+  #map-status code{color:var(--coral);background:var(--coral-soft);padding:2px 6px;border-radius:4px}
+
+  aside{
+    width:320px;flex:none;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--panel-border);
+    padding:16px;
+  }
+  .panel{
+    border:1px solid var(--panel-border);border-radius:10px;
+    padding:14px;margin-bottom:14px;background:rgba(255,255,255,.02);
+  }
+  .panel h2{
+    font-family:var(--font-display);font-size:12px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.6px;color:var(--teal-bright);
+    margin:0 0 10px;
+  }
+  .layer-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px}
+  .layer-row input{accent-color:var(--teal)}
+  .swatch{width:10px;height:10px;border-radius:3px;flex:none}
+  .hint{font-size:12px;color:var(--text-muted);line-height:1.6;margin:6px 0 0}
+
+  button{
+    font-family:var(--font-body);font-size:12.5px;font-weight:500;
+    background:var(--teal);color:#04211E;border:none;border-radius:7px;
+    padding:8px 12px;cursor:pointer;width:100%;
+  }
+  button:hover{background:var(--teal-bright)}
+  button.secondary{background:transparent;border:1px solid var(--panel-border);color:var(--text)}
+
+  .stat{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed var(--panel-border)}
+  .stat:last-child{border-bottom:none}
+  .stat span:last-child{font-family:var(--font-display);color:var(--coral)}
+
+  /* ---------- Bottom chart drawer ---------- */
+  #drawer{
+    flex:none;height:180px;border-top:1px solid var(--panel-border);
+    background:var(--panel);padding:10px 16px;
+  }
+  #drawer h2{
+    font-family:var(--font-display);font-size:12px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.6px;color:var(--teal-bright);margin:0 0 6px;
+  }
+
+  @media (max-width:820px){
+    aside{position:absolute;left:0;top:56px;bottom:180px;z-index:15}
+    .layout{position:relative}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg class="logo" viewBox="0 0 32 32" fill="none">
+    <path d="M4 24c4-10 8-6 10-14 2 8 6 4 10 14" stroke="#FF6B4A" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="16" cy="26" r="2" fill="#4FD9C9"/>
+  </svg>
+  <div class="title-block">
+    <h1>หอคอยดักน้ำจืด — ต้นแบบวิเคราะห์เชิงพื้นที่</h1>
+    <p>แนวปะการัง × แนวโน้มพื้นที่น้ำจืด (ข้อมูลดาวเทียม THEOS-2 / GISTDA)</p>
+  </div>
+  <div class="salinity-legend">
+    <span>น้ำจืด</span><div class="salinity-bar"></div><span>น้ำทะเล</span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="panel">
+      <h2>สถานะการตั้งค่า</h2>
+      <p class="hint">
+        1) ใส่ Sphere API Key ใน &lt;script src&gt; บรรทัดบนสุดของไฟล์<br>
+        2) ใส่ชื่อ layer จริงของแนวปะการังใน <code>CONFIG.CORAL_TYPENAME</code><br>
+        3) ใส่ Open Data API Key ใน <code>CONFIG.OPENDATA_API_KEY</code>
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>ชั้นข้อมูล</h2>
+      <label class="layer-row">
+        <input type="checkbox" id="toggle-coral" checked>
+        <span class="swatch" style="background:var(--coral)"></span>
+        แนวปะการัง (Marine Portal WFS)
+      </label>
+      <label class="layer-row">
+        <input type="checkbox" id="toggle-candidates" checked>
+        <span class="swatch" style="background:var(--freshwater)"></span>
+        จุดปากแม่น้ำที่คลิกเลือก
+      </label>
+      <p class="hint">คลิกบนแผนที่เพื่อปักหมุด "แหล่งน้ำจืด" แล้วระบบจะคำนวณระยะห่างถึงแนวปะการังที่ใกล้ที่สุดให้อัตโนมัติ</p>
+    </div>
+
+    <div class="panel">
+      <h2>จุดที่เลือกล่าสุด</h2>
+      <div class="stat"><span>พิกัด</span><span id="stat-coord">—</span></div>
+      <div class="stat"><span>ระยะถึงปะการังใกล้สุด</span><span id="stat-distance">—</span></div>
+      <div class="stat"><span>ระดับความเสี่ยง</span><span id="stat-risk">—</span></div>
+      <button id="btn-soil" class="secondary" style="margin-top:10px">ดึงความชื้นในดินจุดนี้ (Open Data)</button>
+      <div class="stat"><span>ความชื้นในดิน</span><span id="stat-soil">—</span></div>
+    </div>
+
+    <div class="panel">
+      <button id="btn-reset" class="secondary">ล้างจุดที่เลือกทั้งหมด</button>
+    </div>
+  </aside>
+
+  <div id="map">
+    <div id="map-status">
+      กำลังโหลดแผนที่…<br><br>
+      ถ้าหน้าจอค้างอยู่ตรงนี้ แปลว่ายังไม่ได้ใส่ Sphere API Key ที่ถูกต้อง<br>
+      แก้ไขที่ <code>&lt;script src="https://api.sphere.gistda.or.th/map/?key=..."&gt;</code>
+    </div>
+  </div>
+</div>
+
+<div id="drawer">
+  <h2>แนวโน้มความขุ่น/SST รายเดือน (ข้อมูลตัวอย่าง — แทนที่ด้วย time-series จริงจาก Data Cube)</h2>
+  <canvas id="trend-chart" height="70"></canvas>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — แก้ไขค่าตรงนี้ให้เป็นของโปรเจกต์คุณจริง ๆ
+   ============================================================ */
+const CONFIG = {
+  MAP_CENTER: { lat: 12.9, lng: 100.9 },   // TODO: ปรับเป็นพื้นที่ศึกษาจริง
+  MAP_ZOOM: 10,
+
+  // Marine GI Portal (GeoServer WFS) — ต้องเข้าไปหาชื่อ layer จริงจาก
+  // https://portal.marineportal.gistda.or.th/datasets แล้วแทนที่ค่าด้านล่าง
+  MARINE_WFS_BASE: "https://portal.marineportal.gistda.or.th/geoserver/ows",
+  CORAL_TYPENAME: "geonode:REPLACE_WITH_CORAL_REEF_LAYER_NAME",
+
+  // GISTDA Open Data / API Gateway
+  OPENDATA_API_KEY: "YOUR-OPENDATA-API-KEY",
+  OPENDATA_SOIL_MOISTURE_URL: "https://api-gateway.gistda.or.th/api/2.0/resources/gi-service/v1.0/fundamental/soil-moisture-weekly"
+};
+
+let map, coralGeoJSON = null, lastClicked = null;
+const candidateMarkers = []; // เก็บ id ของ layer วงกลมที่ปักไว้บนแผนที่
+
+/* ---------- 1) เริ่มแผนที่ ---------- */
+function init(){
+  if (typeof sphere === "undefined") {
+    document.getElementById("map-status").innerHTML =
+      "ไม่พบ Sphere SDK — ตรวจสอบว่าใส่ API Key ถูกต้องใน &lt;script src&gt; แล้วโหลดหน้าใหม่";
+    return;
+  }
+
+  map = new sphere.Map({
+    placeholder: document.getElementById("map"),
+    center: new sphere.LatLng(CONFIG.MAP_CENTER.lat, CONFIG.MAP_CENTER.lng),
+    zoom: CONFIG.MAP_ZOOM
+  });
+
+  map.Event.bind(sphere.EventName.Ready, () => {
+    document.getElementById("map-status").style.display = "none";
+    loadCoralLayer();
+    bindMapClick();
+  });
+}
+
+/* ---------- 2) โหลดแนวปะการังจาก Marine Portal (WFS -> GeoJSON) ----------
+   หมายเหตุ: ใช้ map.Renderer ซึ่งเป็น MapLibre GL JS instance ที่ฝังอยู่ใน
+   Sphere Map (ยืนยันจากเอกสาร Sphere ที่อ้างอิง maplibre-gl-js) เพื่อให้
+   syntax การ addSource/addLayer อ้างอิงมาตรฐาน MapLibre GL ที่เสถียร
+   ถ้าต้องการใช้ high-level API อย่าง sphere.Marker/sphere.Overlays เพิ่มเติม
+   ให้ตรวจสอบ method ที่แน่นอนจาก https://api.sphere.gistda.or.th/map/doc.html
+------------------------------------------------------------------ */
+async function loadCoralLayer(){
+  const url = `${CONFIG.MARINE_WFS_BASE}?service=WFS&version=1.0.0&request=GetFeature`
+            + `&typename=${encodeURIComponent(CONFIG.CORAL_TYPENAME)}`
+            + `&outputFormat=application/json&srs=EPSG:4326`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    coralGeoJSON = await res.json();
+
+    const gl = map.Renderer;
+    gl.addSource("coral", { type: "geojson", data: coralGeoJSON });
+    gl.addLayer({
+      id: "coral-fill", type: "fill", source: "coral",
+      paint: { "fill-color": "#FF6B4A", "fill-opacity": 0.35 }
+    });
+    gl.addLayer({
+      id: "coral-line", type: "line", source: "coral",
+      paint: { "line-color": "#FF6B4A", "line-width": 1.5 }
+    });
+  }catch(err){
+    console.warn("โหลดแนวปะการังไม่สำเร็จ (ตรวจสอบ CORAL_TYPENAME และ CORS):", err);
+  }
+}
+
+/* ---------- 3) คลิกแผนที่ = ปักจุดแหล่งน้ำจืด + คำนวณระยะถึงปะการัง ---------- */
+function bindMapClick(){
+  map.Renderer.on("click", (e) => {
+    const { lng, lat } = e.lngLat;
+    lastClicked = [lng, lat];
+    addCandidateMarker(lng, lat);
+    document.getElementById("stat-coord").textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length){
+      const point = turf.point([lng, lat]);
+      let minDist = Infinity;
+      coralGeoJSON.features.forEach(f => {
+        try{
+          const centroid = turf.centroid(f);
+          const d = turf.distance(point, centroid, { units: "kilometers" });
+          if (d < minDist) minDist = d;
+        }catch(_){}
+      });
+      if (isFinite(minDist)){
+        document.getElementById("stat-distance").textContent = minDist.toFixed(2) + " กม.";
+        const risk = minDist < 2 ? "สูง (ใกล้ปะการังมาก)" : minDist < 8 ? "ปานกลาง" : "ต่ำ";
+        document.getElementById("stat-risk").textContent = risk;
+      }
+    } else {
+      document.getElementById("stat-distance").textContent = "ยังไม่ได้โหลดชั้นปะการัง";
+      document.getElementById("stat-risk").textContent = "—";
+    }
+  });
+}
+
+function addCandidateMarker(lng, lat){
+  const id = "candidate-" + candidateMarkers.length;
+  const gl = map.Renderer;
+  gl.addSource(id, {
+    type: "geojson",
+    data: { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] } }
+  });
+  gl.addLayer({
+    id, type: "circle", source: id,
+    paint: { "circle-radius": 7, "circle-color": "#4A9EFF", "circle-stroke-width": 2, "circle-stroke-color": "#08171B" }
+  });
+  candidateMarkers.push(id);
+}
+
+/* ---------- 4) ดึงความชื้นในดิน (GISTDA Open Data) ของจุดที่เลือก ---------- */
+document.getElementById("btn-soil").addEventListener("click", async () => {
+  if (!lastClicked){ alert("คลิกเลือกจุดบนแผนที่ก่อน"); return; }
+  const [lng, lat] = lastClicked;
+  const url = `${CONFIG.OPENDATA_SOIL_MOISTURE_URL}?lat=${lat}&lon=${lng}&api_key=${CONFIG.OPENDATA_API_KEY}`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    document.getElementById("stat-soil").textContent = JSON.stringify(data).slice(0, 40) + "…";
+  }catch(err){
+    document.getElementById("stat-soil").textContent = "ดึงไม่สำเร็จ (เช็ค API Key)";
+    console.warn(err);
+  }
+});
+
+/* ---------- 5) ล้างจุดที่เลือก ---------- */
+document.getElementById("btn-reset").addEventListener("click", () => {
+  const gl = map.Renderer;
+  candidateMarkers.forEach(id => { try{ gl.removeLayer(id); gl.removeSource(id); }catch(_){} });
+  candidateMarkers.length = 0;
+  lastClicked = null;
+  ["stat-coord","stat-distance","stat-risk","stat-soil"].forEach(id => document.getElementById(id).textContent = "—");
+});
+
+/* ---------- 6) toggle layer ชั้นข้อมูล ---------- */
+document.getElementById("toggle-coral").addEventListener("change", (e) => {
+  if (!map || !map.Renderer.getLayer("coral-fill")) return;
+  const v = e.target.checked ? "visible" : "none";
+  map.Renderer.setLayoutProperty("coral-fill", "visibility", v);
+  map.Renderer.setLayoutProperty("coral-line", "visibility", v);
+});
+document.getElementById("toggle-candidates").addEventListener("change", (e) => {
+  const v = e.target.checked ? "visible" : "none";
+  candidateMarkers.forEach(id => {
+    if (map.Renderer.getLayer(id)) map.Renderer.setLayoutProperty(id, "visibility", v);
+  });
+});
+
+/* ---------- 7) กราฟแนวโน้ม (mock data — แทนที่ด้วยข้อมูล time-series จริง) ---------- */
+new Chart(document.getElementById("trend-chart"), {
+  type: "line",
+  data: {
+    labels: ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."],
+    datasets: [{
+      label: "ดัชนีความขุ่น (ตัวอย่าง)",
+      data: [12,10,9,14,22,31,38,35,27,19,14,11],
+      borderColor: "#4A9EFF", backgroundColor: "rgba(74,158,255,.15)",
+      tension: 0.35, fill: true, pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: "#7FA6A0", font: { size: 11 } } } },
+    scales: {
+      x: { ticks: { color: "#7FA6A0", font: { size: 10 } }, grid: { color: "rgba(255,255,255,.04)" } },
+      y: { ticks: { color: "#7FA6A0", font: { size: 10 } }, grid: { color: "rgba(255,255,255,.04)" } }
+    }
+  }
+});
+
+window.addEventListener("load", init);
+</script>
+</body>
+</html>
