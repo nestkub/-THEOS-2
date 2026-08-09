@@ -461,7 +461,7 @@
         console.warn('Map library not loaded. Using CSS background fallback.');
         const dot = document.getElementById('status-dot');
         if (dot) dot.classList.add('active');
-        fetchWeather();
+        fetchWeather(9.14, 100.79);
       }
     } catch (err) {
       console.error('Map init error', err);
@@ -474,7 +474,7 @@
     if (dot) dot.classList.add("active");
     loadCoralLayer();
     bindMapClick();
-    fetchWeather();
+    fetchWeather(9.14, 100.79);
   }
 
   async function loadCoralLayer() {
@@ -583,6 +583,8 @@
       }
     }
 
+    // Fetch weather data for the clicked location
+    fetchWeather(lat, lng);
     addMarker(lng, lat);
   }
 
@@ -627,9 +629,9 @@
     }
   }
 
-  async function fetchWeather() {
+  async function fetchWeather(lat, lng) {
     try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=9.14&longitude=100.79&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl&timezone=Asia/Bangkok`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl&timezone=Asia/Bangkok`;
 
       const res = await fetch(url);
       const data = await res.json();
@@ -693,7 +695,13 @@
         document.getElementById("stat-lat").textContent = "—";
         document.getElementById("stat-lng").textContent = "—";
         document.getElementById("stat-distance").textContent = "—";
+        document.getElementById("temp").textContent = "—";
+        document.getElementById("humidity").textContent = "—";
+        document.getElementById("wind").textContent = "—";
+        document.getElementById("pressure").textContent = "—";
         var rb = document.getElementById("risk-badge"); if (rb) { rb.textContent = "ความเสี่ยง: ต่ำ | Risk: Low"; rb.className = "risk-badge risk-low"; }
+        // Reset to default location weather
+        fetchWeather(9.14, 100.79);
       });
     }
 
@@ -710,7 +718,7 @@
     <div class="brand-icon">🛰️</div>
     <div>
       <h1>THEOS-2</h1>
-      <p>ระบบวิเคราะห���ปะการัง | Coral Analytics Platform</p>
+      <p>ระบบวิเคราะห์ปะการัง | Coral Analytics Platform</p>
     </div>
   </div>
   <div class="status-indicator">
