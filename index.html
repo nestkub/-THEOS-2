@@ -140,7 +140,7 @@
     height: 100%;
     border-radius: 12px;
     background: linear-gradient(180deg, #0a0e12 0%, #1a1a1e 100%),
-                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill=[...]
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill=[...]')
     background-size: cover;
     background-position: center;
     border: 1px solid var(--border);
@@ -662,11 +662,12 @@
       
       // Try to fetch from GISTDA
       try {
-        const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=geonode:coral_reef_got_andaman_utf_8&outputFormat=application/json";
-        
-        console.log("Attempting to fetch coral data from GISTDA...");
-        const res = await fetch(url);
-        
+        // Use the GISTDA WFS endpoint (version 1.0.0) as suggested
+        const gistdaApi = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typename=geonode%3Acoral_reef_got_andaman_utf_8&outputFormat=json&srsName=EPSG:4326";
+
+        console.log("Attempting to fetch coral data from GISTDA (v1.0.0)...");
+        const res = await fetch(gistdaApi);
+
         if (res.ok) {
           coralData = await res.json();
           console.log("✅ Coral data loaded from GISTDA:", coralData.features?.length || 0, "features");
@@ -902,7 +903,7 @@
     if (breakdown.pressure > 0) {
       html += `<div class="score-item"><span>ความกดอากาศ | Pressure:</span><span>+${breakdown.pressure}</span></div>`;
     }
-    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 4px; padding-top: 8px;"><span><strong>รวม | Total:</strong></span><span><strong>${totalScore}/100</strong></span></div>`;
+    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 4px; padding-top: 8px;"><span><strong>รวม | Total:</strong></span><span><strong>${totalScore}</strong></span></div>`;
 
     breakdownEl.innerHTML = html;
     
@@ -998,107 +999,3 @@
     <!-- Card 2: Weather -->
     <div class="card">
       <h2>🌦️ สภาพอากาศ | Weather</h2>
-      <div class="weather-grid" id="weather-grid">
-        <div class="weather-item">
-          <div class="weather-icon">🌡️</div>
-          <div class="weather-value" id="temp">—</div>
-          <div class="weather-label">อุณหภูมิ | Temperature</div>
-        </div>
-        <div class="weather-item">
-          <div class="weather-icon">💧</div>
-          <div class="weather-value" id="humidity">—</div>
-          <div class="weather-label">ความชื้น | Humidity</div>
-        </div>
-        <div class="weather-item">
-          <div class="weather-icon">🌬️</div>
-          <div class="weather-value" id="wind">—</div>
-          <div class="weather-label">ลม | Wind Speed</div>
-        </div>
-        <div class="weather-item">
-          <div class="weather-icon">📊</div>
-          <div class="weather-value" id="pressure">—</div>
-          <div class="weather-label">ความกดอากาศ | Pressure</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Card 3: Quick Links -->
-    <div class="card">
-      <h2>🔗 ข้อมูลเพิ่มเติม | Data Sources</h2>
-      <div class="quick-links">
-        <a href="https://www.windy.com/9.14/100.79/4?pressure" target="_blank" class="link-button">
-          <div class="link-button-text">
-            <span>🌬️ Windy</span>
-            <span class="link-label">ลม ความกดอากาศ | Wind & Pressure</span>
-          </div>
-          <span>→</span>
-        </a>
-        <a href="https://thaiwater.net" target="_blank" class="link-button">
-          <div class="link-button-text">
-            <span>💧 ThaiWater</span>
-            <span class="link-label">ระดับน้ำ ฝน | Water Level & Rain</span>
-          </div>
-          <span>→</span>
-        </a>
-        <a href="https://earth.nullschool.net/" target="_blank" class="link-button">
-          <div class="link-button-text">
-            <span>🌍 Earth</span>
-            <span class="link-label">ลม กระแสน้ำ | Wind & Currents</span>
-          </div>
-          <span>→</span>
-        </a>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Info Modal -->
-<div class="modal" id="info-modal">
-  <div class="modal-content">
-    <h2>📊 วิธีคำนวณ Score Risk</h2>
-    <p>คะแนนความเสี่ยง (Risk Score) ถูกคำนวณจากปัจจัยต่อไปนี้:</p>
-    
-    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">1️⃣ ระยะห่างจากปะการัง (Distance to Coral)</h3>
-    <ul>
-      <li>น้อยกว่า 2 กม. → +40 คะแนน</li>
-      <li>2-8 กม. → +20 คะแนน</li>
-      <li>มากกว่า 8 กม. → +5 คะแนน</li>
-    </ul>
-
-    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">2️⃣ ความเร็วลม (Wind Speed)</h3>
-    <ul>
-      <li>มากกว่า 20 กม./ชม. → +30 คะแนน</li>
-      <li>10-20 กม./ชม. → +15 คะแนน</li>
-      <li>น้อยกว่า 10 กม./ชม. → 0 คะแนน</li>
-    </ul>
-
-    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">3️⃣ ความชื้น (Humidity)</h3>
-    <ul>
-      <li>มากกว่า 85% → +15 คะแนน</li>
-      <li>70-85% → +8 คะแนน</li>
-      <li>น้อยกว่า 70% → 0 คะแนน</li>
-    </ul>
-
-    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">4️⃣ ความกดอากาศ (Pressure)</h3>
-    <ul>
-      <li>น้อยกว่า 1000 hPa (ความสูญเสีย) → +25 คะแนน</li>
-      <li>ปกติ → 0 คะแนน</li>
-    </ul>
-
-    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">📈 ระดับความเสี่ยง</h3>
-    <ul>
-      <li>🟢 ต่ำ (Low): 0-29 คะแนน</li>
-      <li>🟡 ปานกลาง (Medium): 30-49 คะแนน</li>
-      <li>🔴 สูงมาก (High): 50+ คะแนน</li>
-    </ul>
-
-    <p style="margin-top: 16px; color: var(--text-muted); font-size: 12px;">
-      <strong>คำแนะนำ:</strong> คลิกที่แผนที่เพื่อดูข้อมูลสถานที่และเรทิ่งความเสี่ยง
-    </p>
-
-    <button class="secondary modal-close" id="btn-close-modal">ปิด | Close</button>
-  </div>
-</div>
-
-</body>
-</html>
