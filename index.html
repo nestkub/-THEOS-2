@@ -140,7 +140,7 @@
     height: 100%;
     border-radius: 12px;
     background: linear-gradient(180deg, #0a0e12 0%, #1a1a1e 100%),
-                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill="whit[...]
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill=[...]
     background-size: cover;
     background-position: center;
     border: 1px solid var(--border);
@@ -493,12 +493,16 @@
         if (window.L && map && map instanceof L.Map) {
           if (!map._coralLayer) {
             map._coralLayer = L.geoJSON(coralGeoJSON, {
-              style: {
-                color: '#ff6b9d',
-                weight: 2,
-                opacity: 0.9,
-                fillColor: '#ff6b9d',
-                fillOpacity: 0.3
+              style: function(feature, index) {
+                // Alternate between light blue (#87CEEB) and orange (#FF8C00)
+                const isEven = index % 2 === 0;
+                return {
+                  color: isEven ? '#87CEEB' : '#FF8C00',
+                  weight: 2,
+                  opacity: 0.9,
+                  fillColor: isEven ? '#87CEEB' : '#FF8C00',
+                  fillOpacity: 0.4
+                };
               }
             }).addTo(map);
           }
@@ -516,8 +520,13 @@
               type: "fill",
               source: "coral",
               paint: {
-                "fill-color": "#ff6b9d",
-                "fill-opacity": 0.3
+                "fill-color": [
+                  "case",
+                  ["==", ["%", ["feature-state", "index"], 2], 0],
+                  "#87CEEB",
+                  "#FF8C00"
+                ],
+                "fill-opacity": 0.4
               }
             });
 
@@ -526,7 +535,12 @@
               type: "line",
               source: "coral",
               paint: {
-                "line-color": "#ff6b9d",
+                "line-color": [
+                  "case",
+                  ["==", ["%", ["feature-state", "index"], 2], 0],
+                  "#87CEEB",
+                  "#FF8C00"
+                ],
                 "line-width": 2
               }
             });
