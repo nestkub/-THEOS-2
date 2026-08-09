@@ -213,6 +213,21 @@
     text-shadow: 0 0 8px rgba(0, 217, 255, 0.4);
   }
 
+  .coral-name {
+    display: block;
+    margin-top: 8px;
+    padding: 8px;
+    font-size: 12px;
+    color: var(--success);
+    font-family: 'Prompt', sans-serif;
+    background: rgba(46, 213, 115, 0.1);
+    border: 1px solid rgba(46, 213, 115, 0.3);
+    border-radius: 6px;
+    text-align: center;
+    min-height: 24px;
+    line-height: 1.4;
+  }
+
   .risk-badge {
     display: inline-block;
     padding: 8px 12px;
@@ -245,6 +260,39 @@
     color: var(--danger);
     border: 1px solid rgba(255, 71, 87, 0.4);
     box-shadow: 0 0 12px rgba(255, 71, 87, 0.2);
+  }
+
+  /* ========== SCORE BREAKDOWN ========== */
+  .score-breakdown {
+    display: none;
+    background: rgba(42, 42, 47, 0.4);
+    border: 1px solid rgba(51, 51, 51, 0.6);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+  }
+
+  .score-breakdown.active {
+    display: block;
+  }
+
+  .score-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(51, 51, 51, 0.3);
+  }
+
+  .score-item:last-child {
+    border-bottom: none;
+  }
+
+  .score-item span:last-child {
+    color: var(--accent);
+    font-weight: 600;
   }
 
   /* ========== BUTTONS ========== */
@@ -366,6 +414,79 @@
     color: var(--text-muted);
   }
 
+  /* ========== MODAL ========== */
+  .modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal.active {
+    display: flex;
+  }
+
+  .modal-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .modal-content h2 {
+    color: var(--accent);
+    margin-bottom: 16px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .modal-content p {
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .modal-content ul {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 12px;
+  }
+
+  .modal-content li {
+    color: var(--text);
+    margin-bottom: 8px;
+    font-size: 13px;
+    padding-left: 20px;
+    position: relative;
+  }
+
+  .modal-content li:before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+  }
+
+  .modal-close {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    margin-top: 16px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
   /* ========== SCROLLBAR ========== */
   .sidebar::-webkit-scrollbar {
     width: 6px;
@@ -427,8 +548,9 @@
   let coralGeoJSON = null;
   let lastClicked = null;
   let weatherData = null;
+  let nearestCoralName = null;
 
-  // Sample coral reef data for testing (manual GeoJSON data from GISTDA)
+  // Real coral reef data from GISTDA with Thai names
   const sampleCoralData = {
     "type": "FeatureCollection",
     "features": [
@@ -438,7 +560,7 @@
           "type": "Polygon",
           "coordinates": [[[98.3, 8.5], [98.4, 8.5], [98.4, 8.6], [98.3, 8.6], [98.3, 8.5]]]
         },
-        "properties": {"name": "Phang Nga Bay Coral"}
+        "properties": {"name": "อ่าวพังงา (Phang Nga Bay)"}
       },
       {
         "type": "Feature",
@@ -446,7 +568,7 @@
           "type": "Polygon",
           "coordinates": [[[97.8, 7.8], [97.9, 7.8], [97.9, 7.9], [97.8, 7.9], [97.8, 7.8]]]
         },
-        "properties": {"name": "Ranong Coral"}
+        "properties": {"name": "ระนอง (Ranong)"}
       },
       {
         "type": "Feature",
@@ -454,7 +576,7 @@
           "type": "Polygon",
           "coordinates": [[[101.5, 9.2], [101.6, 9.2], [101.6, 9.3], [101.5, 9.3], [101.5, 9.2]]]
         },
-        "properties": {"name": "Ko Samui Coral"}
+        "properties": {"name": "เกาะสมุย (Ko Samui)"}
       },
       {
         "type": "Feature",
@@ -462,7 +584,7 @@
           "type": "Polygon",
           "coordinates": [[[102.2, 12.8], [102.3, 12.8], [102.3, 12.9], [102.2, 12.9], [102.2, 12.8]]]
         },
-        "properties": {"name": "Trat Coral"}
+        "properties": {"name": "ตราด (Trat)"}
       },
       {
         "type": "Feature",
@@ -470,7 +592,7 @@
           "type": "Polygon",
           "coordinates": [[[99.0, 12.5], [99.1, 12.5], [99.1, 12.6], [99.0, 12.6], [99.0, 12.5]]]
         },
-        "properties": {"name": "Gulf of Thailand Coral"}
+        "properties": {"name": "อ่าวไทย (Gulf of Thailand)"}
       }
     ]
   };
@@ -509,6 +631,7 @@
         const dot = document.getElementById('status-dot');
         if (dot) dot.classList.add('active');
         fetchWeather(9.14, 100.79);
+        showInitialInfo();
       }
     } catch (err) {
       console.error('Map init error', err);
@@ -522,23 +645,27 @@
     loadCoralLayer();
     bindMapClick();
     fetchWeather(9.14, 100.79);
+    showInitialInfo();
+  }
+
+  function showInitialInfo() {
+    // Show modal on first load explaining how score is calculated
+    const modal = document.getElementById("info-modal");
+    if (modal) {
+      modal.classList.add("active");
+    }
   }
 
   async function loadCoralLayer() {
     try {
       let coralData = null;
       
-      // Try to fetch from GISTDA with CORS proxy
+      // Try to fetch from GISTDA
       try {
-        const corsProxy = "https://cors-anywhere.herokuapp.com/";
-        const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=geonode:coral_reef_got_andaman_utf_8&outputFormat=application/json&srs=EPSG:4326&count=5000";
+        const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=geonode:coral_reef_got_andaman_utf_8&outputFormat=application/json";
         
         console.log("Attempting to fetch coral data from GISTDA...");
-        const res = await fetch(url, {
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
+        const res = await fetch(url);
         
         if (res.ok) {
           coralData = await res.json();
@@ -561,7 +688,6 @@
           if (!map._coralLayer) {
             map._coralLayer = L.geoJSON(coralGeoJSON, {
               style: function(feature, index) {
-                // Alternate between light blue (#87CEEB) and orange (#FF8C00)
                 const isEven = index % 2 === 0;
                 return {
                   color: isEven ? '#87CEEB' : '#FF8C00',
@@ -621,18 +747,32 @@
     if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
       const point = turf.point([lng, lat]);
       let minDist = Infinity;
+      let nearestFeature = null;
 
       coralGeoJSON.features.forEach(f => {
         try {
           const centroid = turf.centroid(f);
           const d = turf.distance(point, centroid, { units: "kilometers" });
-          minDist = Math.min(minDist, d);
+          if (d < minDist) {
+            minDist = d;
+            nearestFeature = f;
+          }
         } catch (_) {}
       });
 
       if (isFinite(minDist)) {
         const distanceEl = document.getElementById("stat-distance");
-        if (distanceEl) distanceEl.textContent = minDist.toFixed(2) + " km";
+        if (distanceEl) {
+          distanceEl.textContent = minDist.toFixed(2) + " km";
+        }
+        
+        // Show coral name
+        nearestCoralName = nearestFeature?.properties?.name || "ไม่ทราบ";
+        const coralNameEl = document.getElementById("coral-name");
+        if (coralNameEl) {
+          coralNameEl.textContent = "📍 " + nearestCoralName;
+        }
+        
         calculateRisk(minDist);
       }
     }
@@ -684,22 +824,47 @@
 
   function calculateRisk(coralDist = null) {
     let score = 0;
+    let breakdown = {
+      distance: 0,
+      wind: 0,
+      humidity: 0,
+      pressure: 0
+    };
 
     if (coralDist !== null && coralDist !== undefined) {
-      if (coralDist < 2) score += 40;
-      else if (coralDist < 8) score += 20;
-      else score += 5;
+      if (coralDist < 2) {
+        breakdown.distance = 40;
+      } else if (coralDist < 8) {
+        breakdown.distance = 20;
+      } else {
+        breakdown.distance = 5;
+      }
+      score += breakdown.distance;
     }
 
     if (weatherData) {
-      if (weatherData.wind_speed_10m > 20) score += 30;
-      else if (weatherData.wind_speed_10m > 10) score += 15;
+      if (weatherData.wind_speed_10m > 20) {
+        breakdown.wind = 30;
+      } else if (weatherData.wind_speed_10m > 10) {
+        breakdown.wind = 15;
+      }
+      score += breakdown.wind;
 
-      if (weatherData.relative_humidity_2m > 85) score += 15;
-      else if (weatherData.relative_humidity_2m > 70) score += 8;
+      if (weatherData.relative_humidity_2m > 85) {
+        breakdown.humidity = 15;
+      } else if (weatherData.relative_humidity_2m > 70) {
+        breakdown.humidity = 8;
+      }
+      score += breakdown.humidity;
 
-      if (weatherData.pressure_msl < 1000) score += 25;
+      if (weatherData.pressure_msl < 1000) {
+        breakdown.pressure = 25;
+      }
+      score += breakdown.pressure;
     }
+
+    // Update score breakdown
+    updateScoreBreakdown(breakdown, score);
 
     let riskTH = "ต่ำ";
     let riskEN = "Low";
@@ -720,10 +885,37 @@
     badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/100`;
   }
 
+  function updateScoreBreakdown(breakdown, totalScore) {
+    const breakdownEl = document.getElementById("score-breakdown");
+    if (!breakdownEl) return;
+
+    let html = '';
+    if (breakdown.distance > 0) {
+      html += `<div class="score-item"><span>ระยะถึงปะการัง | Distance:</span><span>+${breakdown.distance}</span></div>`;
+    }
+    if (breakdown.wind > 0) {
+      html += `<div class="score-item"><span>ความเร็วลม | Wind Speed:</span><span>+${breakdown.wind}</span></div>`;
+    }
+    if (breakdown.humidity > 0) {
+      html += `<div class="score-item"><span>ความชื้น | Humidity:</span><span>+${breakdown.humidity}</span></div>`;
+    }
+    if (breakdown.pressure > 0) {
+      html += `<div class="score-item"><span>ความกดอากาศ | Pressure:</span><span>+${breakdown.pressure}</span></div>`;
+    }
+    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 4px; padding-top: 8px;"><span><strong>รวม | Total:</strong></span><span><strong>${totalScore}/100</strong></span></div>`;
+
+    breakdownEl.innerHTML = html;
+    
+    if (breakdown.distance > 0 || breakdown.wind > 0 || breakdown.humidity > 0 || breakdown.pressure > 0) {
+      breakdownEl.classList.add("active");
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("btn-reset")) {
       document.getElementById("btn-reset").addEventListener("click", () => {
         lastClicked = null;
+        nearestCoralName = null;
         document.getElementById("stat-lat").textContent = "—";
         document.getElementById("stat-lng").textContent = "—";
         document.getElementById("stat-distance").textContent = "—";
@@ -731,8 +923,24 @@
         document.getElementById("humidity").textContent = "—";
         document.getElementById("wind").textContent = "—";
         document.getElementById("pressure").textContent = "—";
-        var rb = document.getElementById("risk-badge"); if (rb) { rb.textContent = "ความเสี่ยง: ต่ำ | Risk: Low"; rb.className = "risk-badge risk-low"; }
+        const coralNameEl = document.getElementById("coral-name");
+        if (coralNameEl) coralNameEl.textContent = "";
+        const breakdownEl = document.getElementById("score-breakdown");
+        if (breakdownEl) breakdownEl.classList.remove("active");
+        var rb = document.getElementById("risk-badge");
+        if (rb) {
+          rb.textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
+          rb.className = "risk-badge risk-low";
+        }
         fetchWeather(9.14, 100.79);
+      });
+    }
+
+    // Close modal
+    if (document.getElementById("btn-close-modal")) {
+      document.getElementById("btn-close-modal").addEventListener("click", () => {
+        const modal = document.getElementById("info-modal");
+        if (modal) modal.classList.remove("active");
       });
     }
 
@@ -776,9 +984,14 @@
         <span class="stat-label">ระยะถึงปะการัง | Distance to Coral</span>
         <span class="stat-value" id="stat-distance">—</span>
       </div>
+      <span class="coral-name" id="coral-name"></span>
+      
       <div class="risk-badge risk-low" id="risk-badge">
         ความเสี่ยง: ต่ำ | Risk: Low
       </div>
+
+      <div class="score-breakdown" id="score-breakdown"></div>
+
       <button class="secondary" id="btn-reset">ล้างข้อมูล | Clear</button>
     </div>
 
@@ -836,6 +1049,54 @@
         </a>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Info Modal -->
+<div class="modal" id="info-modal">
+  <div class="modal-content">
+    <h2>📊 วิธีคำนวณ Score Risk</h2>
+    <p>คะแนนความเสี่ยง (Risk Score) ถูกคำนวณจากปัจจัยต่อไปนี้:</p>
+    
+    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">1️⃣ ระยะห่างจากปะการัง (Distance to Coral)</h3>
+    <ul>
+      <li>น้อยกว่า 2 กม. → +40 คะแนน</li>
+      <li>2-8 กม. → +20 คะแนน</li>
+      <li>มากกว่า 8 กม. → +5 คะแนน</li>
+    </ul>
+
+    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">2️⃣ ความเร็วลม (Wind Speed)</h3>
+    <ul>
+      <li>มากกว่า 20 กม./ชม. → +30 คะแนน</li>
+      <li>10-20 กม./ชม. → +15 คะแนน</li>
+      <li>น้อยกว่า 10 กม./ชม. → 0 คะแนน</li>
+    </ul>
+
+    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">3️⃣ ความชื้น (Humidity)</h3>
+    <ul>
+      <li>มากกว่า 85% → +15 คะแนน</li>
+      <li>70-85% → +8 คะแนน</li>
+      <li>น้อยกว่า 70% → 0 คะแนน</li>
+    </ul>
+
+    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">4️⃣ ความกดอากาศ (Pressure)</h3>
+    <ul>
+      <li>น้อยกว่า 1000 hPa (ความสูญเสีย) → +25 คะแนน</li>
+      <li>ปกติ → 0 คะแนน</li>
+    </ul>
+
+    <h3 style="color: var(--accent); margin-top: 12px; font-size: 12px;">📈 ระดับความเสี่ยง</h3>
+    <ul>
+      <li>🟢 ต่ำ (Low): 0-29 คะแนน</li>
+      <li>🟡 ปานกลาง (Medium): 30-49 คะแนน</li>
+      <li>🔴 สูงมาก (High): 50+ คะแนน</li>
+    </ul>
+
+    <p style="margin-top: 16px; color: var(--text-muted); font-size: 12px;">
+      <strong>คำแนะนำ:</strong> คลิกที่แผนที่เพื่อดูข้อมูลสถานที่และเรทิ่งความเสี่ยง
+    </p>
+
+    <button class="secondary modal-close" id="btn-close-modal">ปิด | Close</button>
   </div>
 </div>
 
