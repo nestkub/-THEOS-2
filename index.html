@@ -10,9 +10,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
-<!-- Sphere official CSS & JS (from sphere.gistda.or.th) -->
-<link rel="stylesheet" href="https://sphere.gistda.or.th/sphere/sphere.css" />
-<script src="https://sphere.gistda.or.th/sphere/sphere.js"></script>
+<!-- Fallback map stack: Leaflet is available from CDN and avoids the missing Sphere assets -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
 
@@ -429,40 +429,47 @@
   let weatherData = null;
 
   function init() {
-    if (!window.sphere) {
-      console.error('Sphere library not loaded.');
-      return;
-    }
-
-    // Initialize map using sphere API (use placeholder element)
     try {
-      // Use constructor compatible with both styles
-      if (typeof sphere.Map === 'function') {
-        // Some builds accept id string or options with placeholder
+      if (window.sphere && typeof sphere.Map === 'function') {
         map = new sphere.Map({
           placeholder: document.getElementById('map'),
           location: { lat: 9.14, lng: 100.79 },
           zoom: 7,
           layer: sphere.Layers ? sphere.Layers.NORMAL : undefined
         });
+
+        if (map && map.Event) {
+          map.Event.bind(sphere.EventName.Ready, onMapReady);
+        } else {
+          setTimeout(() => {
+            if (typeof onMapReady === 'function') onMapReady();
+          }, 500);
+        }
+      } else if (window.L) {
+        map = L.map('map', {
+          zoomControl: true,
+          minZoom: 2,
+          maxZoom: 18
+        }).setView([9.14, 100.79], 7);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        onMapReady();
+      } else {
+        console.warn('Map library not loaded. Using CSS background fallback.');
+        const dot = document.getElementById('status-dot');
+        if (dot) dot.classList.add('active');
+        fetchWeather();
       }
     } catch (err) {
       console.error('Map init error', err);
-      return;
-    }
-
-    if (map && map.Event) {
-      map.Event.bind(sphere.EventName.Ready, onMapReady);
-    } else {
-      // If no Event, call ready handler shortly after
-      setTimeout(() => {
-        if (typeof onMapReady === 'function') onMapReady();
-      }, 500);
     }
   }
 
   function onMapReady() {
-    console.log("✅ Sphere Map Ready");
+    console.log("✅ Map Ready");
     var dot = document.getElementById("status-dot");
     if (dot) dot.classList.add("active");
     loadCoralLayer();
@@ -479,37 +486,51 @@
 
       const res = await fetch(url);
       if (!res.ok) throw new Error("WFS Error");
-      
+
       coralGeoJSON = await res.json();
 
-      if (coralGeoJSON.features && coralGeoJSON.features.length > 0 && map && map.Renderer) {
-        const gl = map.Renderer;
-        
-        if (!gl.getSource("coral")) {
-          gl.addSource("coral", {
-            type: "geojson",
-            data: coralGeoJSON
-          });
+      if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
+        if (window.L && map && map instanceof L.Map) {
+          if (!map._coralLayer) {
+            map._coralLayer = L.geoJSON(coralGeoJSON, {
+              style: {
+                color: '#ff6b9d',
+                weight: 2,
+                opacity: 0.9,
+                fillColor: '#ff6b9d',
+                fillOpacity: 0.3
+              }
+            }).addTo(map);
+          }
+        } else if (map && map.Renderer) {
+          const gl = map.Renderer;
 
-          gl.addLayer({
-            id: "coral-fill",
-            type: "fill",
-            source: "coral",
-            paint: {
-              "fill-color": "#ff6b9d",
-              "fill-opacity": 0.3
-            }
-          });
+          if (!gl.getSource("coral")) {
+            gl.addSource("coral", {
+              type: "geojson",
+              data: coralGeoJSON
+            });
 
-          gl.addLayer({
-            id: "coral-line",
-            type: "line",
-            source: "coral",
-            paint: {
-              "line-color": "#ff6b9d",
-              "line-width": 2
-            }
-          });
+            gl.addLayer({
+              id: "coral-fill",
+              type: "fill",
+              source: "coral",
+              paint: {
+                "fill-color": "#ff6b9d",
+                "fill-opacity": 0.3
+              }
+            });
+
+            gl.addLayer({
+              id: "coral-line",
+              type: "line",
+              source: "coral",
+              paint: {
+                "line-color": "#ff6b9d",
+                "line-width": 2
+              }
+            });
+          }
         }
       }
     } catch (err) {
@@ -518,65 +539,89 @@
   }
 
   function bindMapClick() {
-    if (!map || !map.Renderer) return;
-
     try {
-      map.Renderer.on('click', (e) => {
-        const { lng, lat } = e.lngLat;
-        lastClicked = [lng, lat];
-
-        document.getElementById("stat-lat").textContent = lat.toFixed(4);
-        document.getElementById("stat-lng").textContent = lng.toFixed(4);
-
-        if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
-          const point = turf.point([lng, lat]);
-          let minDist = Infinity;
-
-          coralGeoJSON.features.forEach(f => {
-            try {
-              const centroid = turf.centroid(f);
-              const d = turf.distance(point, centroid, { units: "kilometers" });
-              minDist = Math.min(minDist, d);
-            } catch (_) {}
-          });
-
-          if (isFinite(minDist)) {
-            document.getElementById("stat-distance").textContent = minDist.toFixed(2) + " km";
-            calculateRisk(minDist);
-          }
-        }
-
-        addMarker(lng, lat);
-      });
+      if (window.L && map && map instanceof L.Map) {
+        map.on('click', (e) => {
+          const { lat, lng } = e.latlng;
+          handleMapLocation(lng, lat);
+        });
+      } else if (map && map.Renderer) {
+        map.Renderer.on('click', (e) => {
+          const { lng, lat } = e.lngLat;
+          handleMapLocation(lng, lat);
+        });
+      }
     } catch (err) {
       console.warn('bindMapClick error', err);
     }
   }
 
+  function handleMapLocation(lng, lat) {
+    lastClicked = [lng, lat];
+
+    const latEl = document.getElementById("stat-lat");
+    const lngEl = document.getElementById("stat-lng");
+    if (latEl) latEl.textContent = lat.toFixed(4);
+    if (lngEl) lngEl.textContent = lng.toFixed(4);
+
+    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
+      const point = turf.point([lng, lat]);
+      let minDist = Infinity;
+
+      coralGeoJSON.features.forEach(f => {
+        try {
+          const centroid = turf.centroid(f);
+          const d = turf.distance(point, centroid, { units: "kilometers" });
+          minDist = Math.min(minDist, d);
+        } catch (_) {}
+      });
+
+      if (isFinite(minDist)) {
+        const distanceEl = document.getElementById("stat-distance");
+        if (distanceEl) distanceEl.textContent = minDist.toFixed(2) + " km";
+        calculateRisk(minDist);
+      }
+    }
+
+    addMarker(lng, lat);
+  }
+
   function addMarker(lng, lat) {
-    if (!map || !map.Renderer) return;
-
-    const id = "marker-" + Date.now();
     try {
-      map.Renderer.addSource(id, {
-        type: "geojson",
-        data: {
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [lng, lat] }
+      if (window.L && map && map instanceof L.Map) {
+        if (map._locationMarker) {
+          map.removeLayer(map._locationMarker);
         }
-      });
 
-      map.Renderer.addLayer({
-        id,
-        type: "circle",
-        source: id,
-        paint: {
-          "circle-radius": 8,
-          "circle-color": "#00d9ff",
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#0f0f10"
-        }
-      });
+        map._locationMarker = L.circleMarker([lat, lng], {
+          radius: 8,
+          color: '#0f0f10',
+          weight: 2,
+          fillColor: '#00d9ff',
+          fillOpacity: 1
+        }).addTo(map);
+      } else if (map && map.Renderer) {
+        const id = "marker-" + Date.now();
+        map.Renderer.addSource(id, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [lng, lat] }
+          }
+        });
+
+        map.Renderer.addLayer({
+          id,
+          type: "circle",
+          source: id,
+          paint: {
+            "circle-radius": 8,
+            "circle-color": "#00d9ff",
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#0f0f10"
+          }
+        });
+      }
     } catch (err) {
       console.warn("Marker error:", err);
     }
