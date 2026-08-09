@@ -479,15 +479,24 @@
 
   async function loadCoralLayer() {
     try {
+      // Using the correct layer name from GISTDA: geonode:coral_reef_got_andaman_utf_8
       const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?" +
-                  "service=WFS&version=1.0.0&request=GetFeature" +
-                  "&typename=geonode:coral_reefs_thailand_2020" +
-                  "&outputFormat=application/json&srs=EPSG:4326";
+                  "service=WFS&version=2.0.0&request=GetFeature" +
+                  "&typeNames=geonode:coral_reef_got_andaman_utf_8" +
+                  "&outputFormat=application/json&srs=EPSG:4326" +
+                  "&count=5000";
 
+      console.log("Fetching from:", url);
       const res = await fetch(url);
-      if (!res.ok) throw new Error("WFS Error");
+      
+      if (!res.ok) {
+        console.warn("WFS Error:", res.status, res.statusText);
+        // Fallback to alternative endpoint
+        return loadCoralLayerFallback();
+      }
 
       coralGeoJSON = await res.json();
+      console.log("Coral data loaded:", coralGeoJSON.features?.length || 0, "features");
 
       if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
         if (window.L && map && map instanceof L.Map) {
@@ -501,54 +510,69 @@
                   weight: 2,
                   opacity: 0.9,
                   fillColor: isEven ? '#87CEEB' : '#FF8C00',
-                  fillOpacity: 0.4
+                  fillOpacity: 0.5,
+                  dashArray: isEven ? '5, 5' : 'none'
                 };
+              },
+              onEachFeature: function(feature, layer) {
+                layer.bindPopup("<b>พื้นที่ปะการัง</b><br>Coral Reef Area");
               }
             }).addTo(map);
+            map.fitBounds(map._coralLayer.getBounds());
           }
-        } else if (map && map.Renderer) {
-          const gl = map.Renderer;
+        }
+      } else {
+        console.warn("No coral features found");
+        loadCoralLayerFallback();
+      }
+    } catch (err) {
+      console.warn("Coral layer error:", err);
+      loadCoralLayerFallback();
+    }
+  }
 
-          if (!gl.getSource("coral")) {
-            gl.addSource("coral", {
-              type: "geojson",
-              data: coralGeoJSON
-            });
+  async function loadCoralLayerFallback() {
+    try {
+      // Fallback using the 2020 dataset
+      const url = "https://portal.marineportal.gistda.or.th/geoserver/ows?" +
+                  "service=WFS&version=2.0.0&request=GetFeature" +
+                  "&typeNames=geonode:coral_reefs_thailand_2020" +
+                  "&outputFormat=application/json&srs=EPSG:4326" +
+                  "&count=5000";
 
-            gl.addLayer({
-              id: "coral-fill",
-              type: "fill",
-              source: "coral",
-              paint: {
-                "fill-color": [
-                  "case",
-                  ["==", ["%", ["feature-state", "index"], 2], 0],
-                  "#87CEEB",
-                  "#FF8C00"
-                ],
-                "fill-opacity": 0.4
+      console.log("Trying fallback from:", url);
+      const res = await fetch(url);
+      
+      if (!res.ok) throw new Error("Fallback WFS Error");
+
+      coralGeoJSON = await res.json();
+      console.log("Fallback coral data loaded:", coralGeoJSON.features?.length || 0, "features");
+
+      if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
+        if (window.L && map && map instanceof L.Map) {
+          if (!map._coralLayer) {
+            map._coralLayer = L.geoJSON(coralGeoJSON, {
+              style: function(feature, index) {
+                const isEven = index % 2 === 0;
+                return {
+                  color: isEven ? '#87CEEB' : '#FF8C00',
+                  weight: 2,
+                  opacity: 0.9,
+                  fillColor: isEven ? '#87CEEB' : '#FF8C00',
+                  fillOpacity: 0.5,
+                  dashArray: isEven ? '5, 5' : 'none'
+                };
+              },
+              onEachFeature: function(feature, layer) {
+                layer.bindPopup("<b>พื้นที่ปะการัง</b><br>Coral Reef Area");
               }
-            });
-
-            gl.addLayer({
-              id: "coral-line",
-              type: "line",
-              source: "coral",
-              paint: {
-                "line-color": [
-                  "case",
-                  ["==", ["%", ["feature-state", "index"], 2], 0],
-                  "#87CEEB",
-                  "#FF8C00"
-                ],
-                "line-width": 2
-              }
-            });
+            }).addTo(map);
+            map.fitBounds(map._coralLayer.getBounds());
           }
         }
       }
     } catch (err) {
-      console.warn("Coral layer error:", err);
+      console.warn("Fallback coral layer error:", err);
     }
   }
 
