@@ -10,11 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
-<!-- Fallback map stack: Leaflet is available from CDN and avoids the missing Sphere assets -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<!-- Map engine: GISTDA sphere Map API (replaces the previous Leaflet fallback stack) -->
+<script type="text/javascript" src="https://api.sphere.gistda.or.th/map/?key=F9438A4733A0423EB179C7B98344680E"></script>
 
 <style type="text/css">
   :root {
@@ -139,10 +136,7 @@
     flex: 1;
     height: 100%;
     border-radius: 12px;
-    background: linear-gradient(180deg, #0a0e12 0%, #1a1a1e 100%),
-                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill="%23ffffff" opacity="0.1"/></svg>');
-    background-size: cover;
-    background-position: center;
+    background: linear-gradient(180deg, #0a0e12 0%, #1a1a1e 100%);
     border: 1px solid var(--border);
     overflow: hidden;
     position: relative;
@@ -366,6 +360,54 @@
     font-family: 'Prompt', sans-serif;
   }
 
+  /* ========== RISK AREA LEGEND ========== */
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 4px 0;
+    font-family: 'Prompt', sans-serif;
+  }
+
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  #reef-risk-summary {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    font-family: 'Prompt', sans-serif;
+  }
+
+  #reef-risk-summary .rr-empty {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  #reef-risk-summary strong {
+    color: var(--text);
+  }
+
+  .disclaimer {
+    margin-top: 10px;
+    padding: 8px;
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    background: rgba(255, 165, 2, 0.08);
+    border: 1px solid rgba(255, 165, 2, 0.25);
+    border-radius: 6px;
+    font-family: 'Prompt', sans-serif;
+  }
+
   /* ========== LINKS SECTION ========== */
   .quick-links {
     display: flex;
@@ -546,8 +588,10 @@
 <script>
   var map;
   let coralGeoJSON = null;
-  let lastClicked = null;
-  let weatherData = null;
+  let reefEntries = [];        // [{ name, area, feature, rings: [[[lon,lat],...], ...], polygons: [sphereOverlay,...] }]
+  let currentMarker = null;
+  let riskGridOverlays = [];   // grid cells drawn for the currently-inspected reef
+  let weatherData = null;      // weather at the exact clicked point
   let nearestCoralName = null;
 
   // Coral reef data source: UNEP-WCMC / WorldFish / WRI / TNC (2021)
@@ -607,6 +651,81 @@
     ]
   };
 
+  /* ============================================================
+     Small self-contained geometry helpers (replace turf.js: the
+     sphere SDK doesn't expose the same helpers, and this keeps the
+     page dependency-free).
+     All rings are stored as arrays of [lon, lat] pairs.
+  ============================================================ */
+
+  function toRings(geometry) {
+    // Returns an array of outer rings (each an array of [lon,lat]) for
+    // both Polygon and MultiPolygon geometries.
+    if (!geometry) return [];
+    if (geometry.type === 'Polygon') {
+      return geometry.coordinates && geometry.coordinates[0] ? [geometry.coordinates[0]] : [];
+    }
+    if (geometry.type === 'MultiPolygon') {
+      return (geometry.coordinates || [])
+        .map(poly => poly && poly[0])
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  function ringCentroid(ring) {
+    let sx = 0, sy = 0;
+    ring.forEach(([lon, lat]) => { sx += lon; sy += lat; });
+    return [sx / ring.length, sy / ring.length];
+  }
+
+  function ringsCentroid(rings) {
+    let pts = [];
+    rings.forEach(r => pts.push(ringCentroid(r)));
+    return ringCentroid(pts);
+  }
+
+  function ringsBBox(rings) {
+    let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+    rings.forEach(ring => ring.forEach(([lon, lat]) => {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }));
+    return { minLon, minLat, maxLon, maxLat };
+  }
+
+  function pointInRing(lon, lat, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1];
+      const xj = ring[j][0], yj = ring[j][1];
+      const intersect = ((yi > lat) !== (yj > lat)) &&
+        (lon < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function pointInRings(lon, lat, rings) {
+    return rings.some(ring => pointInRing(lon, lat, ring));
+  }
+
+  function haversineKm(lon1, lat1, lon2, lat2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  /* ============================================================
+     Map bootstrap
+  ============================================================ */
+
   async function fetchReefPage(offset, pageSize) {
     const params = new URLSearchParams({
       where: '1=1',
@@ -647,34 +766,16 @@
       if (window.sphere && typeof sphere.Map === 'function') {
         map = new sphere.Map({
           placeholder: document.getElementById('map'),
-          location: { lat: 9.14, lng: 100.79 },
+          location: { lon: 100.79, lat: 9.14 },
           zoom: 7,
-          layer: sphere.Layers ? sphere.Layers.NORMAL : undefined
+          layer: sphere.Layers.HYBRID,
+          ui: sphere.UiComponent.Full,
+          language: 'th'
         });
 
-        if (map && map.Event) {
-          map.Event.bind(sphere.EventName.Ready, onMapReady);
-        } else {
-          setTimeout(() => {
-            if (typeof onMapReady === 'function') onMapReady();
-          }, 500);
-        }
-      } else if (window.L) {
-        map = L.map('map', {
-          zoomControl: true,
-          minZoom: 2,
-          maxZoom: 18
-        }).setView([9.14, 100.79], 7);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
-
-        onMapReady();
+        map.Event.bind(sphere.EventName.Ready, onMapReady);
       } else {
-        console.warn('Map library not loaded. Using CSS background fallback.');
-        const dot = document.getElementById('status-dot');
-        if (dot) dot.classList.add('active');
+        console.warn('sphere Map API failed to load (check the API key / network).');
         fetchWeather(9.14, 100.79);
         showInitialInfo();
       }
@@ -694,12 +795,15 @@
   }
 
   function showInitialInfo() {
-    // Show modal on first load explaining how score is calculated
     const modal = document.getElementById("info-modal");
     if (modal) {
       modal.classList.add("active");
     }
   }
+
+  /* ============================================================
+     Coral reef layer
+  ============================================================ */
 
   async function loadCoralLayer() {
     try {
@@ -713,7 +817,6 @@
         console.warn("Failed to fetch UNEP-WCMC reef data:", e.message);
       }
 
-      // Use fallback data only if the live query returned nothing
       if (features.length > 0) {
         coralGeoJSON = { type: 'FeatureCollection', features };
       } else {
@@ -721,36 +824,51 @@
         coralGeoJSON = fallbackCoralData;
       }
 
-      if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
-        if (window.L && map && map instanceof L.Map) {
-          if (!map._coralLayer) {
-            map._coralLayer = L.geoJSON(coralGeoJSON, {
-              style: function() {
-                return {
-                  color: '#7a3a12',
-                  weight: 0.6,
-                  opacity: 0.9,
-                  fillColor: '#ffa502',
-                  fillOpacity: 0.55
-                };
-              },
-              onEachFeature: function(feature, layer) {
-                const p = feature.properties || {};
-                const name = p.name || p.orig_name || "พื้นที่ปะการัง";
-                const area = p.gis_area_k;
-                layer.bindPopup(
-                  `<b>${name}</b><br>Coral Reef Area${area ? `<br>≈ ${area.toFixed(2)} ตร.กม.` : ''}`
-                );
-              }
-            }).addTo(map);
-            
+      reefEntries = [];
+
+      if (coralGeoJSON.features && coralGeoJSON.features.length > 0 && map) {
+        coralGeoJSON.features.forEach(feature => {
+          const p = feature.properties || {};
+          const name = p.name || p.orig_name || "พื้นที่ปะการัง";
+          const area = p.gis_area_k;
+          const rings = toRings(feature.geometry);
+          if (rings.length === 0) return;
+
+          const polygons = rings.map(ring => {
+            const locationList = ring.map(([lon, lat]) => ({ lon, lat }));
             try {
-              map.fitBounds(map._coralLayer.getBounds());
+              const poly = new sphere.Polygon(locationList, {
+                lineColor: '#7a3a12',
+                lineWidth: 1,
+                fillColor: 'rgba(255, 165, 2, 0.55)',
+                clickable: true,
+                popup: {
+                  title: name,
+                  detail: area ? `พื้นที่แนวปะการัง ≈ ${area.toFixed(2)} ตร.กม.` : 'พื้นที่แนวปะการัง'
+                }
+              });
+              map.Overlays.add(poly);
+              return poly;
             } catch (e) {
-              console.log("Could not fit bounds:", e);
-              map.setView([9.14, 100.79], 8);
+              console.warn('Could not render reef polygon:', e);
+              return null;
             }
+          }).filter(Boolean);
+
+          reefEntries.push({ name, area, feature, rings, polygons });
+        });
+
+        // Fit the map to the loaded reef area
+        try {
+          const bbox = ringsBBox(reefEntries.flatMap(r => r.rings));
+          if (isFinite(bbox.minLon)) {
+            map.bound({
+              minLon: bbox.minLon, minLat: bbox.minLat,
+              maxLon: bbox.maxLon, maxLat: bbox.maxLat
+            });
           }
+        } catch (e) {
+          console.log("Could not fit bounds:", e);
         }
       }
     } catch (err) {
@@ -758,63 +876,77 @@
     }
   }
 
+  /* ============================================================
+     Click handling
+  ============================================================ */
+
   function bindMapClick() {
     try {
-      if (window.L && map && map instanceof L.Map) {
-        map.on('click', (e) => {
-          const { lat, lng } = e.latlng;
-          handleMapLocation(lng, lat);
-        });
-      } else if (map && map.Renderer) {
-        map.Renderer.on('click', (e) => {
-          const { lng, lat } = e.lngLat;
-          handleMapLocation(lng, lat);
-        });
-      }
+      map.Event.bind(sphere.EventName.Click, (e) => {
+        const loc = extractLonLat(e);
+        if (loc) handleMapLocation(loc.lon, loc.lat);
+      });
     } catch (err) {
       console.warn('bindMapClick error', err);
     }
   }
 
-  function handleMapLocation(lng, lat) {
-    lastClicked = [lng, lat];
+  // The sphere click event payload shape isn't fully pinned down across
+  // versions, so this pulls lon/lat defensively from the likely spots.
+  function extractLonLat(e) {
+    if (!e) return null;
+    if (typeof e.lon === 'number' && typeof e.lat === 'number') return { lon: e.lon, lat: e.lat };
+    if (e.Location) return { lon: e.Location.lon, lat: e.Location.lat };
+    if (e.location) return { lon: e.location.lon, lat: e.location.lat };
+    return null;
+  }
 
+  function findNearestReef(lng, lat) {
+    if (!reefEntries.length) return null;
+
+    // 1) exact hit: point falls inside a reef polygon
+    for (const entry of reefEntries) {
+      if (pointInRings(lng, lat, entry.rings)) {
+        return { entry, distanceKm: 0 };
+      }
+    }
+
+    // 2) otherwise, nearest by centroid distance
+    let best = null;
+    let bestDist = Infinity;
+    reefEntries.forEach(entry => {
+      const [clon, clat] = ringsCentroid(entry.rings);
+      const d = haversineKm(lng, lat, clon, clat);
+      if (d < bestDist) {
+        bestDist = d;
+        best = entry;
+      }
+    });
+    return best ? { entry: best, distanceKm: bestDist } : null;
+  }
+
+  function handleMapLocation(lng, lat) {
     const latEl = document.getElementById("stat-lat");
     const lngEl = document.getElementById("stat-lng");
     if (latEl) latEl.textContent = lat.toFixed(4);
     if (lngEl) lngEl.textContent = lng.toFixed(4);
 
-    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
-      const point = turf.point([lng, lat]);
-      let minDist = Infinity;
-      let nearestFeature = null;
+    const found = findNearestReef(lng, lat);
 
-      coralGeoJSON.features.forEach(f => {
-        try {
-          const centroid = turf.centroid(f);
-          const d = turf.distance(point, centroid, { units: "kilometers" });
-          if (d < minDist) {
-            minDist = d;
-            nearestFeature = f;
-          }
-        } catch (_) {}
-      });
-
-      if (isFinite(minDist)) {
-        const distanceEl = document.getElementById("stat-distance");
-        if (distanceEl) {
-          distanceEl.textContent = minDist.toFixed(2) + " km";
-        }
-        
-        // Show coral name
-        nearestCoralName = nearestFeature?.properties?.name || "ไม่ทราบ";
-        const coralNameEl = document.getElementById("coral-name");
-        if (coralNameEl) {
-          coralNameEl.textContent = "📍 " + nearestCoralName;
-        }
-        
-        calculateRisk(minDist);
+    if (found) {
+      const distanceEl = document.getElementById("stat-distance");
+      if (distanceEl) {
+        distanceEl.textContent = found.distanceKm.toFixed(2) + " km";
       }
+
+      nearestCoralName = found.entry.name;
+      const coralNameEl = document.getElementById("coral-name");
+      if (coralNameEl) {
+        coralNameEl.textContent = "📍 " + nearestCoralName;
+      }
+
+      calculateRisk(found.distanceKm);
+      showRiskArea(found.entry);
     }
 
     fetchWeather(lat, lng);
@@ -823,23 +955,25 @@
 
   function addMarker(lng, lat) {
     try {
-      if (window.L && map && map instanceof L.Map) {
-        if (map._locationMarker) {
-          map.removeLayer(map._locationMarker);
-        }
-
-        map._locationMarker = L.circleMarker([lat, lng], {
-          radius: 8,
-          color: '#0f0f10',
-          weight: 2,
-          fillColor: '#00d9ff',
-          fillOpacity: 1
-        }).addTo(map);
+      if (!map) return;
+      if (currentMarker) {
+        map.Overlays.remove(currentMarker);
       }
+      currentMarker = new sphere.Marker({ lon: lng, lat: lat }, {
+        icon: {
+          html: '<div style="width:16px;height:16px;border-radius:50%;background:#00d9ff;border:2px solid #0f0f10;box-shadow:0 0 8px rgba(0,217,255,0.8);"></div>',
+          offset: { x: 8, y: 8 }
+        }
+      });
+      map.Overlays.add(currentMarker);
     } catch (err) {
       console.warn("Marker error:", err);
     }
   }
+
+  /* ============================================================
+     Point weather + point risk score (sidebar badge)
+  ============================================================ */
 
   async function fetchWeather(lat, lng) {
     try {
@@ -869,12 +1003,7 @@
 
   function calculateRisk(coralDist = null) {
     let score = 0;
-    let breakdown = {
-      distance: 0,
-      wind: 0,
-      humidity: 0,
-      pressure: 0
-    };
+    let breakdown = { distance: 0, wind: 0, humidity: 0, pressure: 0 };
 
     if (coralDist !== null && coralDist !== undefined) {
       if (coralDist < 2) {
@@ -908,7 +1037,6 @@
       score += breakdown.pressure;
     }
 
-    // Update score breakdown
     updateScoreBreakdown(breakdown, score);
 
     let riskTH = "ต่ำ";
@@ -950,16 +1078,206 @@
     html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 4px; padding-top: 8px;"><span><strong>รวม | Total:</strong></span><span><strong>${totalScore}</strong></span></div>`;
 
     breakdownEl.innerHTML = html;
-    
+
     if (breakdown.distance > 0 || breakdown.wind > 0 || breakdown.humidity > 0 || breakdown.pressure > 0) {
       breakdownEl.classList.add("active");
     }
   }
 
+  /* ============================================================
+     Reef risk-area grid
+     Samples weather across a grid covering the clicked reef (plus a
+     buffer of surrounding water) and paints each cell by a combined
+     risk score:
+       - storm risk: wind speed, low pressure, rain-probability
+       - freshwater-runoff risk: a PROXY based on rainfall intensity/
+         probability only (Open-Meteo has no river discharge, salinity
+         or plume-tracking data, so this is an estimate, not a
+         measurement — see the disclaimer in the sidebar).
+  ============================================================ */
+
+  function clearRiskGrid() {
+    riskGridOverlays.forEach(o => {
+      try { map.Overlays.remove(o); } catch (e) {}
+    });
+    riskGridOverlays = [];
+  }
+
+  function riskColor(score) {
+    if (score >= 75) return { fill: 'rgba(255, 71, 87, 0.5)', line: 'rgba(255, 71, 87, 0.9)', label: 'สูงมาก | Very High' };
+    if (score >= 50) return { fill: 'rgba(255, 111, 60, 0.45)', line: 'rgba(255, 111, 60, 0.85)', label: 'สูง | High' };
+    if (score >= 25) return { fill: 'rgba(255, 165, 2, 0.4)', line: 'rgba(255, 165, 2, 0.8)', label: 'ปานกลาง | Medium' };
+    return { fill: 'rgba(46, 213, 115, 0.35)', line: 'rgba(46, 213, 115, 0.8)', label: 'ต่ำ | Low' };
+  }
+
+  async function showRiskArea(entry) {
+    if (!map || !entry) return;
+
+    clearRiskGrid();
+    setReefRiskSummary('<span class="rr-empty">กำลังคำนวณพื้นที่เสี่ยง... | Calculating risk area...</span>');
+
+    const bbox = ringsBBox(entry.rings);
+    const lonSpan = Math.max(bbox.maxLon - bbox.minLon, 0.01);
+    const latSpan = Math.max(bbox.maxLat - bbox.minLat, 0.01);
+    const padLon = Math.min(Math.max(lonSpan * 0.35, 0.02), 0.15);
+    const padLat = Math.min(Math.max(latSpan * 0.35, 0.02), 0.15);
+
+    const minLon = bbox.minLon - padLon, maxLon = bbox.maxLon + padLon;
+    const minLat = bbox.minLat - padLat, maxLat = bbox.maxLat + padLat;
+
+    const gridSize = 4; // 4x4 = 16 sample points, batched into one API call
+    const stepLon = (maxLon - minLon) / gridSize;
+    const stepLat = (maxLat - minLat) / gridSize;
+
+    const cells = [];
+    for (let i = 0; i < gridSize; i++) {
+      for (let j = 0; j < gridSize; j++) {
+        const cellMinLon = minLon + i * stepLon;
+        const cellMaxLon = cellMinLon + stepLon;
+        const cellMinLat = minLat + j * stepLat;
+        const cellMaxLat = cellMinLat + stepLat;
+        cells.push({
+          centerLon: (cellMinLon + cellMaxLon) / 2,
+          centerLat: (cellMinLat + cellMaxLat) / 2,
+          cellMinLon, cellMaxLon, cellMinLat, cellMaxLat
+        });
+      }
+    }
+
+    let results;
+    try {
+      results = await fetchGridWeather(cells);
+    } catch (err) {
+      console.warn("Risk grid weather fetch failed:", err);
+      setReefRiskSummary('<span class="rr-empty">ไม่สามารถโหลดข้อมูลสภาพอากาศสำหรับพื้นที่นี้ได้ | Could not load weather for this area.</span>');
+      return;
+    }
+
+    let maxScore = -1, sumScore = 0, maxCell = null;
+    let stormHits = 0, freshwaterHits = 0;
+
+    cells.forEach((cell, idx) => {
+      const w = results[idx];
+      const { score, stormScore, freshwaterScore } = computeCellRisk(w);
+      sumScore += score;
+      if (score > maxScore) { maxScore = score; maxCell = cell; }
+      if (stormScore >= 25) stormHits++;
+      if (freshwaterScore >= 20) freshwaterHits++;
+
+      const colors = riskColor(score);
+      try {
+        const rect = new sphere.Rectangle(
+          { lon: cell.cellMinLon, lat: cell.cellMaxLat },
+          { lon: cell.cellMaxLon, lat: cell.cellMinLat },
+          {
+            fillColor: colors.fill,
+            lineColor: colors.line,
+            lineWidth: 1,
+            clickable: true,
+            popup: {
+              title: `${colors.label} • ${score}/100`,
+              detail: w
+                ? `ลม ${Math.round(w.wind || 0)} km/h • ฝน ${Math.round(w.precip || 0)} mm • โอกาสฝน ${Math.round(w.precipProb || 0)}%<br>ความกดอากาศ ${Math.round(w.pressure || 0)} hPa • ความชื้น ${Math.round(w.humidity || 0)}%`
+                : 'ไม่มีข้อมูล'
+            }
+          }
+        );
+        map.Overlays.add(rect);
+        riskGridOverlays.push(rect);
+      } catch (e) {
+        console.warn('Could not render risk cell:', e);
+      }
+    });
+
+    const avgScore = Math.round(sumScore / cells.length);
+    renderReefRiskSummary(entry, avgScore, Math.round(maxScore), stormHits, freshwaterHits, cells.length);
+  }
+
+  async function fetchGridWeather(cells) {
+    const lats = cells.map(c => c.centerLat.toFixed(4)).join(',');
+    const lons = cells.map(c => c.centerLon.toFixed(4)).join(',');
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
+      `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl,precipitation` +
+      `&hourly=precipitation_probability,precipitation` +
+      `&forecast_days=1&timezone=Asia/Bangkok`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : [data];
+
+    return cells.map((_, idx) => {
+      const d = list[idx];
+      if (!d || !d.current) return null;
+
+      // Average the next 6 hours of precipitation probability as a
+      // short-term storm/runoff outlook.
+      let precipProb = null;
+      if (d.hourly && Array.isArray(d.hourly.precipitation_probability)) {
+        const arr = d.hourly.precipitation_probability.slice(0, 6).filter(v => typeof v === 'number');
+        if (arr.length) precipProb = arr.reduce((a, b) => a + b, 0) / arr.length;
+      }
+
+      return {
+        wind: d.current.wind_speed_10m,
+        humidity: d.current.relative_humidity_2m,
+        pressure: d.current.pressure_msl,
+        precip: d.current.precipitation,
+        precipProb: precipProb
+      };
+    });
+  }
+
+  function computeCellRisk(w) {
+    if (!w) return { score: 0, stormScore: 0, freshwaterScore: 0 };
+
+    let stormScore = 0;
+    if (w.wind > 20) stormScore += 30;
+    else if (w.wind > 10) stormScore += 15;
+
+    if (w.pressure && w.pressure < 1000) stormScore += 25;
+
+    if (w.precipProb !== null) {
+      if (w.precipProb > 60) stormScore += 20;
+      else if (w.precipProb > 30) stormScore += 10;
+    }
+
+    // Freshwater-intrusion PROXY: rainfall intensity/probability only.
+    let freshwaterScore = 0;
+    const precip = w.precip || 0;
+    if (precip > 4 || (w.precipProb !== null && w.precipProb > 70)) {
+      freshwaterScore += 25;
+    } else if (precip > 0.5 || (w.precipProb !== null && w.precipProb > 40)) {
+      freshwaterScore += 12;
+    }
+
+    const score = Math.min(100, stormScore + freshwaterScore);
+    return { score, stormScore, freshwaterScore };
+  }
+
+  function setReefRiskSummary(html) {
+    const el = document.getElementById('reef-risk-summary');
+    if (el) el.innerHTML = html;
+  }
+
+  function renderReefRiskSummary(entry, avgScore, maxScore, stormHits, freshwaterHits, totalCells) {
+    const colors = riskColor(maxScore);
+    setReefRiskSummary(`
+      <div><strong>${entry.name}</strong></div>
+      <div style="margin-top:4px;">คะแนนเฉลี่ย | Avg score: <strong>${avgScore}/100</strong></div>
+      <div>จุดเสี่ยงสูงสุด | Peak cell: <strong>${maxScore}/100</strong> (${colors.label})</div>
+      <div>จุดที่มีความเสี่ยงพายุ/ลมแรง | Storm-risk cells: <strong>${stormHits}/${totalCells}</strong></div>
+      <div>จุดที่มีความเสี่ยงน้ำจืดไหลบ่า (ประมาณการ) | Freshwater-runoff proxy cells: <strong>${freshwaterHits}/${totalCells}</strong></div>
+    `);
+  }
+
+  /* ============================================================
+     UI wiring
+  ============================================================ */
+
   document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("btn-reset")) {
       document.getElementById("btn-reset").addEventListener("click", () => {
-        lastClicked = null;
         nearestCoralName = null;
         document.getElementById("stat-lat").textContent = "—";
         document.getElementById("stat-lng").textContent = "—";
@@ -977,17 +1295,24 @@
           rb.textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
           rb.className = "risk-badge risk-low";
         }
+        clearRiskGrid();
+        setReefRiskSummary('<span class="rr-empty">คลิกบนพื้นที่ปะการังเพื่อดูพื้นที่เสี่ยง | Click a coral area to see its risk zone</span>');
+        if (currentMarker) {
+          try { map.Overlays.remove(currentMarker); } catch (e) {}
+          currentMarker = null;
+        }
         fetchWeather(9.14, 100.79);
       });
     }
 
-    // Close modal
     if (document.getElementById("btn-close-modal")) {
       document.getElementById("btn-close-modal").addEventListener("click", () => {
         const modal = document.getElementById("info-modal");
         if (modal) modal.classList.remove("active");
       });
     }
+
+    setReefRiskSummary('<span class="rr-empty">คลิกบนพื้นที่ปะการังเพื่อดูพื้นที่เสี่ยง | Click a coral area to see its risk zone</span>');
 
     init();
   });
@@ -1030,7 +1355,7 @@
         <span class="stat-value" id="stat-distance">—</span>
       </div>
       <span class="coral-name" id="coral-name"></span>
-      
+
       <div class="risk-badge risk-low" id="risk-badge">
         ความเสี่ยง: ต่ำ | Risk: Low
       </div>
@@ -1067,7 +1392,23 @@
       </div>
     </div>
 
-    <!-- Card 3: Info Modal -->
+    <!-- Card 3: Reef risk area -->
+    <div class="card">
+      <h2>🌊 พื้นที่เสี่ยงบนแนวปะการัง | Reef Risk Area</h2>
+      <div class="legend-row"><span class="legend-swatch" style="background:rgba(46,213,115,0.8);"></span>ต่ำ | Low (0–24)</div>
+      <div class="legend-row"><span class="legend-swatch" style="background:rgba(255,165,2,0.8);"></span>ปานกลาง | Medium (25–49)</div>
+      <div class="legend-row"><span class="legend-swatch" style="background:rgba(255,111,60,0.85);"></span>สูง | High (50–74)</div>
+      <div class="legend-row"><span class="legend-swatch" style="background:rgba(255,71,87,0.9);"></span>สูงมาก | Very High (75–100)</div>
+
+      <div id="reef-risk-summary"></div>
+
+      <div class="disclaimer">
+        คะแนน "น้ำจืดไหลบ่า" เป็นการประมาณจากปริมาณ/โอกาสฝนเท่านั้น ไม่ใช่ข้อมูลความเค็มหรือการไหลของแม่น้ำจริง<br>
+        Freshwater-intrusion score is a rainfall-based proxy only — no real salinity or river-discharge data is used.
+      </div>
+    </div>
+
+    <!-- Info Modal -->
     <div class="modal" id="info-modal">
       <div class="modal-content">
         <h2>📊 ระบบวิเคราะห์ความเสี่ยง | Risk Analysis System</h2>
@@ -1078,10 +1419,10 @@
           <strong>วิธีการใช้งาน | How to Use:</strong>
         </p>
         <ul>
-          <li>คลิกบนแผนที่เพื่อเลือกตำแหน่ง</li>
-          <li>ระบบจะคำนวณระยะห่างจากปะการัง</li>
-          <li>ดูข้อมูลสภาพอากาศและคะแนนความเสี่ยง</li>
-          <li>คะแนนความเสี่ยงคำนวณจากระยะห่าง ลม ความชื้น และความกดอากาศ</li>
+          <li>คลิกบนแผนที่หรือบนพื้นที่ปะการังเพื่อเลือกตำแหน่ง</li>
+          <li>ระบบจะคำนวณระยะห่างจากปะการังที่ใกล้ที่สุด</li>
+          <li>เมื่อคลิกใกล้แนวปะการัง ระบบจะวาดตารางพื้นที่เสี่ยงรอบแนวปะการังนั้น โดยประเมินจากลม ความกดอากาศ และโอกาส/ปริมาณฝน (เป็นตัวแทนความเสี่ยงพายุและน้ำจืดไหลบ่า)</li>
+          <li>ดูข้อมูลสภาพอากาศและคะแนนความเสี่ยงของจุดที่คลิก</li>
         </ul>
         <button class="modal-close" id="btn-close-modal">ปิด | Close</button>
       </div>
