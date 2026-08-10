@@ -546,9 +546,9 @@
 <script>
   var map;
   let coralGeoJSON = null;
-  let lastClicked = null;
+  let selectedCoral = null;
   let weatherData = null;
-  let nearestCoralName = null;
+  let dangerZones = [];
 
   // Real coral reef data from GISTDA with Thai names
   const sampleCoralData = {
@@ -630,7 +630,6 @@
         console.warn('Map library not loaded. Using CSS background fallback.');
         const dot = document.getElementById('status-dot');
         if (dot) dot.classList.add('active');
-        fetchWeather(9.14, 100.79);
         showInitialInfo();
       }
     } catch (err) {
@@ -643,13 +642,10 @@
     var dot = document.getElementById("status-dot");
     if (dot) dot.classList.add("active");
     loadCoralLayer();
-    bindMapClick();
-    fetchWeather(9.14, 100.79);
     showInitialInfo();
   }
 
   function showInitialInfo() {
-    // Show modal on first load explaining how score is calculated
     const modal = document.getElementById("info-modal");
     if (modal) {
       modal.classList.add("active");
@@ -660,9 +656,7 @@
     try {
       let coralData = null;
       
-      // Try to fetch from GISTDA
       try {
-        // Use the GISTDA WFS endpoint (version 1.0.0) as suggested
         const gistdaApi = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typename=geonode%3Acoral_reef_got_andaman_utf_8&outputFormat=json&srsName=EPSG:4326";
 
         console.log("Attempting to fetch coral data from GISTDA (v1.0.0)...");
@@ -676,7 +670,6 @@
         console.warn("Failed to fetch from GISTDA:", e.message);
       }
       
-      // Use sample data if fetch fails
       if (!coralData || !coralData.features || coralData.features.length === 0) {
         console.log("Using sample coral reef data for demonstration");
         coralData = sampleCoralData;
@@ -702,6 +695,23 @@
               onEachFeature: function(feature, layer) {
                 const name = feature.properties?.name || "พื้นที่ปะการัง";
                 layer.bindPopup(`<b>${name}</b><br>Coral Reef Area`);
+                
+                // เพิ่ม click event
+                layer.on('click', function(e) {
+                  L.DomEvent.stopPropagation(e);
+                  handleCoralClick(feature, layer);
+                });
+                
+                // เปลี่ยน cursor เมื่อ hover
+                layer.on('mouseover', function() {
+                  this.setStyle({ opacity: 1, fillOpacity: 0.8, weight: 3 });
+                  map._container.style.cursor = 'pointer';
+                });
+                
+                layer.on('mouseout', function() {
+                  this.setStyle({ opacity: 0.9, fillOpacity: 0.5, weight: 2 });
+                  map._container.style.cursor = 'default';
+                });
               }
             }).addTo(map);
             
@@ -719,87 +729,75 @@
     }
   }
 
-  function bindMapClick() {
-    try {
-      if (window.L && map && map instanceof L.Map) {
-        map.on('click', (e) => {
-          const { lat, lng } = e.latlng;
-          handleMapLocation(lng, lat);
-        });
-      } else if (map && map.Renderer) {
-        map.Renderer.on('click', (e) => {
-          const { lng, lat } = e.lngLat;
-          handleMapLocation(lng, lat);
-        });
-      }
-    } catch (err) {
-      console.warn('bindMapClick error', err);
-    }
+  function handleCoralClick(feature, layer) {
+    selectedCoral = {
+      feature: feature,
+      layer: layer,
+      name: feature.properties?.name || "ไม่ทราบ"
+    };
+
+    // อัปเดต UI
+    updateCoralInfo();
+
+    // ดึงข้อมูลสภาพอากาศ
+    const centroid = turf.centroid(feature);
+    const [lng, lat] = centroid.geometry.coordinates;
+    fetchWeather(lat, lng);
+
+    // วาด danger zones
+    drawDangerZones(centroid.geometry.coordinates);
   }
 
-  function handleMapLocation(lng, lat) {
-    lastClicked = [lng, lat];
+  function updateCoralInfo() {
+    if (!selectedCoral) return;
 
+    const coralNameEl = document.getElementById("coral-name");
+    if (coralNameEl) {
+      coralNameEl.textContent = "📍 " + selectedCoral.name;
+    }
+
+    // ลบ lat/lng ออกเนื่องจากเลือกพื้นที่ปะการังแทนจุด
     const latEl = document.getElementById("stat-lat");
     const lngEl = document.getElementById("stat-lng");
-    if (latEl) latEl.textContent = lat.toFixed(4);
-    if (lngEl) lngEl.textContent = lng.toFixed(4);
-
-    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
-      const point = turf.point([lng, lat]);
-      let minDist = Infinity;
-      let nearestFeature = null;
-
-      coralGeoJSON.features.forEach(f => {
-        try {
-          const centroid = turf.centroid(f);
-          const d = turf.distance(point, centroid, { units: "kilometers" });
-          if (d < minDist) {
-            minDist = d;
-            nearestFeature = f;
-          }
-        } catch (_) {}
-      });
-
-      if (isFinite(minDist)) {
-        const distanceEl = document.getElementById("stat-distance");
-        if (distanceEl) {
-          distanceEl.textContent = minDist.toFixed(2) + " km";
-        }
-        
-        // Show coral name
-        nearestCoralName = nearestFeature?.properties?.name || "ไม่ทราบ";
-        const coralNameEl = document.getElementById("coral-name");
-        if (coralNameEl) {
-          coralNameEl.textContent = "📍 " + nearestCoralName;
-        }
-        
-        calculateRisk(minDist);
-      }
-    }
-
-    fetchWeather(lat, lng);
-    addMarker(lng, lat);
+    const distanceEl = document.getElementById("stat-distance");
+    
+    if (latEl) latEl.textContent = "✓";
+    if (lngEl) lngEl.textContent = "Active";
+    if (distanceEl) distanceEl.textContent = "Zone Ready";
   }
 
-  function addMarker(lng, lat) {
-    try {
-      if (window.L && map && map instanceof L.Map) {
-        if (map._locationMarker) {
-          map.removeLayer(map._locationMarker);
-        }
+  function drawDangerZones(coralCoords) {
+    // ลบ zones เก่า
+    dangerZones.forEach(zone => {
+      if (zone.circle) map.removeLayer(zone.circle);
+    });
+    dangerZones = [];
 
-        map._locationMarker = L.circleMarker([lat, lng], {
-          radius: 8,
-          color: '#0f0f10',
-          weight: 2,
-          fillColor: '#00d9ff',
-          fillOpacity: 1
-        }).addTo(map);
-      }
-    } catch (err) {
-      console.warn("Marker error:", err);
-    }
+    const zones = [
+      { distance: 2, risk: 'high', color: '#ff4757', label: 'High Risk (0-2 km)' },
+      { distance: 8, risk: 'medium', color: '#ffa502', label: 'Medium Risk (2-8 km)' },
+      { distance: 15, risk: 'low', color: '#2ed573', label: 'Low Risk (8-15 km)' }
+    ];
+
+    zones.forEach(zone => {
+      const circle = L.circle([coralCoords[1], coralCoords[0]], {
+        radius: zone.distance * 1000, // แปลง km เป็น meter
+        color: zone.color,
+        weight: 2,
+        opacity: 0.4,
+        fillColor: zone.color,
+        fillOpacity: 0.15,
+        dashArray: '5, 5'
+      }).addTo(map);
+
+      // เพิ่ม label
+      const popup = `<b>${zone.label}</b><br>ระยะ: ${zone.distance} km`;
+      circle.bindPopup(popup);
+
+      dangerZones.push({ circle, zone });
+    });
+
+    calculateRiskLevel();
   }
 
   async function fetchWeather(lat, lng) {
@@ -822,32 +820,22 @@
       if (windEl) windEl.textContent = Math.round(current.wind_speed_10m) + " km/h";
       if (pressureEl) pressureEl.textContent = Math.round(current.pressure_msl) + " hPa";
 
-      calculateRisk();
+      calculateRiskLevel();
     } catch (err) {
       console.warn("Weather error:", err);
     }
   }
 
-  function calculateRisk(coralDist = null) {
+  function calculateRiskLevel() {
     let score = 0;
     let breakdown = {
-      distance: 0,
       wind: 0,
       humidity: 0,
-      pressure: 0
+      pressure: 0,
+      location: 0
     };
 
-    if (coralDist !== null && coralDist !== undefined) {
-      if (coralDist < 2) {
-        breakdown.distance = 40;
-      } else if (coralDist < 8) {
-        breakdown.distance = 20;
-      } else {
-        breakdown.distance = 5;
-      }
-      score += breakdown.distance;
-    }
-
+    // ความเสี่ยงจากสภาพอากาศ
     if (weatherData) {
       if (weatherData.wind_speed_10m > 20) {
         breakdown.wind = 30;
@@ -869,7 +857,11 @@
       score += breakdown.pressure;
     }
 
-    // Update score breakdown
+    // ความเสี่ยงจากตำแหน่ง (ถ้าอยู่ในพื้นที่ปะการัง)
+    breakdown.location = 25; // พื้นฐานเพราะอยู่ในพื้นที่ปะการัง
+
+    score += breakdown.location;
+
     updateScoreBreakdown(breakdown, score);
 
     let riskTH = "ต่ำ";
@@ -896,8 +888,8 @@
     if (!breakdownEl) return;
 
     let html = '';
-    if (breakdown.distance > 0) {
-      html += `<div class="score-item"><span>ระยะถึงปะการัง | Distance:</span><span>+${breakdown.distance}</span></div>`;
+    if (breakdown.location > 0) {
+      html += `<div class="score-item"><span>ตำแหน่งปะการัง | Location:</span><span>+${breakdown.location}</span></div>`;
     }
     if (breakdown.wind > 0) {
       html += `<div class="score-item"><span>ความเร็วลม | Wind Speed:</span><span>+${breakdown.wind}</span></div>`;
@@ -912,7 +904,7 @@
 
     breakdownEl.innerHTML = html;
     
-    if (breakdown.distance > 0 || breakdown.wind > 0 || breakdown.humidity > 0 || breakdown.pressure > 0) {
+    if (breakdown.location > 0 || breakdown.wind > 0 || breakdown.humidity > 0 || breakdown.pressure > 0) {
       breakdownEl.classList.add("active");
     }
   }
@@ -920,8 +912,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("btn-reset")) {
       document.getElementById("btn-reset").addEventListener("click", () => {
-        lastClicked = null;
-        nearestCoralName = null;
+        selectedCoral = null;
+        weatherData = null;
         document.getElementById("stat-lat").textContent = "—";
         document.getElementById("stat-lng").textContent = "—";
         document.getElementById("stat-distance").textContent = "—";
@@ -938,11 +930,15 @@
           rb.textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
           rb.className = "risk-badge risk-low";
         }
-        fetchWeather(9.14, 100.79);
+        
+        // ลบ danger zones
+        dangerZones.forEach(zone => {
+          if (zone.circle) map.removeLayer(zone.circle);
+        });
+        dangerZones = [];
       });
     }
 
-    // Close modal
     if (document.getElementById("btn-close-modal")) {
       document.getElementById("btn-close-modal").addEventListener("click", () => {
         const modal = document.getElementById("info-modal");
@@ -977,17 +973,17 @@
   <div class="sidebar">
     <!-- Card 1: Location & Risk -->
     <div class="card">
-      <h2>📍 ตำแหน่ง | Location</h2>
+      <h2>📍 ปะการัง | Coral Reef</h2>
       <div class="stat-row">
-        <span class="stat-label">ละติจูด | Latitude</span>
+        <span class="stat-label">ตำแหน่ง | Location</span>
         <span class="stat-value" id="stat-lat">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">ลองจิจูด | Longitude</span>
+        <span class="stat-label">สถานะ | Status</span>
         <span class="stat-value" id="stat-lng">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">ระยะถึงปะการัง | Distance to Coral</span>
+        <span class="stat-label">Zone | Zone</span>
         <span class="stat-value" id="stat-distance">—</span>
       </div>
       <span class="coral-name" id="coral-name"></span>
@@ -1039,10 +1035,12 @@
           <strong>วิธีการใช้งาน | How to Use:</strong>
         </p>
         <ul>
-          <li>คลิกบนแผนที่เพื่อเลือกตำแหน่ง</li>
-          <li>ระบบจะคำนวณระยะห่างจากปะการัง</li>
+          <li>คลิกบนพื้นที่ปะการังที่ต้องการวิเคราะห์</li>
+          <li>ระบบจะแสดง 3 Zone ความเสี่ยงรอบ ๆ ปะการัง</li>
           <li>ดูข้อมูลสภาพอากาศและคะแนนความเสี่ยง</li>
-          <li>คะแนนความเสี่ยงคำนวณจากระยะห่าง ลม ความชื้น และความกดอากาศ</li>
+          <li>🔴 โซนสีแดง (High Risk): 0-2 km</li>
+          <li>🟠 โซนสีเหลือง (Medium Risk): 2-8 km</li>
+          <li>🟢 โซนสีเขียว (Low Risk): 8-15 km</li>
         </ul>
         <button class="modal-close" id="btn-close-modal">ปิด | Close</button>
       </div>
