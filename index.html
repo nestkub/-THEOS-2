@@ -10,8 +10,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
-<!-- Map engine: GISTDA sphere Map API (replaces the previous Leaflet fallback stack) -->
-<script type="text/javascript" src="https://api.sphere.gistda.or.th/map/?key=5ABFD5D4718C49A98BF28D7A18B86E47"></script>
+<!-- Map engine: Leaflet + OpenStreetMap. No API key required, so this never 401s. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style type="text/css">
   :root {
@@ -140,6 +141,28 @@
     border: 1px solid var(--border);
     overflow: hidden;
     position: relative;
+  }
+
+  /* Leaflet dark-theme touch-ups so it matches the rest of the UI */
+  .leaflet-container {
+    background: #0a0e12;
+    font-family: 'Prompt', 'Inter', sans-serif;
+  }
+  .leaflet-popup-content-wrapper {
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 8px;
+  }
+  .leaflet-popup-tip {
+    background: var(--surface);
+  }
+  .leaflet-bar a {
+    background: var(--surface);
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+  }
+  .leaflet-bar a:hover {
+    background: var(--surface-light);
   }
 
   /* ========== SIDEBAR ========== */
@@ -408,54 +431,6 @@
     font-family: 'Prompt', sans-serif;
   }
 
-  /* ========== LINKS SECTION ========== */
-  .quick-links {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .link-button {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    background: rgba(42, 42, 47, 0.6);
-    border: 1px solid rgba(51, 51, 51, 0.6);
-    border-radius: 8px;
-    color: var(--text);
-    text-decoration: none;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: 'Prompt', sans-serif;
-    backdrop-filter: blur(5px);
-  }
-
-  .link-button:hover {
-    background: rgba(0, 217, 255, 0.1);
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 12px rgba(0, 217, 255, 0.2);
-  }
-
-  .link-button span {
-    font-size: 14px;
-  }
-
-  .link-button-text {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-  }
-
-  .link-label {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
   /* ========== MODAL ========== */
   .modal {
     display: none;
@@ -588,9 +563,9 @@
 <script>
   var map;
   let coralGeoJSON = null;
-  let reefEntries = [];        // [{ name, area, feature, rings: [[[lon,lat],...], ...], polygons: [sphereOverlay,...] }]
+  let reefEntries = [];        // [{ name, area, feature, rings: [[[lon,lat],...], ...] }]
   let currentMarker = null;
-  let riskGridOverlays = [];   // grid cells drawn for the currently-inspected reef
+  let riskGridLayer = null;    // Leaflet layerGroup for the currently-inspected reef's risk grid
   let weatherData = null;      // weather at the exact clicked point
   let nearestCoralName = null;
 
@@ -652,15 +627,11 @@
   };
 
   /* ============================================================
-     Small self-contained geometry helpers (replace turf.js: the
-     sphere SDK doesn't expose the same helpers, and this keeps the
-     page dependency-free).
+     Small self-contained geometry helpers.
      All rings are stored as arrays of [lon, lat] pairs.
   ============================================================ */
 
   function toRings(geometry) {
-    // Returns an array of outer rings (each an array of [lon,lat]) for
-    // both Polygon and MultiPolygon geometries.
     if (!geometry) return [];
     if (geometry.type === 'Polygon') {
       return geometry.coordinates && geometry.coordinates[0] ? [geometry.coordinates[0]] : [];
@@ -763,22 +734,20 @@
 
   function init() {
     try {
-      if (window.sphere && typeof sphere.Map === 'function') {
-        map = new sphere.Map({
-          placeholder: document.getElementById('map'),
-          location: { lon: 100.79, lat: 9.14 },
-          zoom: 7,
-          layer: sphere.Layers.HYBRID,
-          ui: sphere.UiComponent.Full,
-          language: 'th'
-        });
+      map = L.map('map', {
+        zoomControl: true,
+        minZoom: 2,
+        maxZoom: 18
+      }).setView([9.14, 100.79], 7);
 
-        map.Event.bind(sphere.EventName.Ready, onMapReady);
-      } else {
-        console.warn('sphere Map API failed to load (check the API key / network).');
-        fetchWeather(9.14, 100.79);
-        showInitialInfo();
-      }
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      riskGridLayer = L.layerGroup().addTo(map);
+
+      onMapReady();
     } catch (err) {
       console.error('Map init error', err);
     }
@@ -834,41 +803,35 @@
           const rings = toRings(feature.geometry);
           if (rings.length === 0) return;
 
-          const polygons = rings.map(ring => {
-            const locationList = ring.map(([lon, lat]) => ({ lon, lat }));
-            try {
-              const poly = new sphere.Polygon(locationList, {
-                lineColor: '#7a3a12',
-                lineWidth: 1,
-                fillColor: 'rgba(255, 165, 2, 0.55)',
-                clickable: true,
-                popup: {
-                  title: name,
-                  detail: area ? `พื้นที่แนวปะการัง ≈ ${area.toFixed(2)} ตร.กม.` : 'พื้นที่แนวปะการัง'
-                }
-              });
-              map.Overlays.add(poly);
-              return poly;
-            } catch (e) {
-              console.warn('Could not render reef polygon:', e);
-              return null;
-            }
-          }).filter(Boolean);
-
-          reefEntries.push({ name, area, feature, rings, polygons });
+          reefEntries.push({ name, area, feature, rings });
         });
 
-        // Fit the map to the loaded reef area
         try {
-          const bbox = ringsBBox(reefEntries.flatMap(r => r.rings));
-          if (isFinite(bbox.minLon)) {
-            map.bound({
-              minLon: bbox.minLon, minLat: bbox.minLat,
-              maxLon: bbox.maxLon, maxLat: bbox.maxLat
-            });
+          const reefLayer = L.geoJSON(coralGeoJSON, {
+            style: function() {
+              return {
+                color: '#7a3a12',
+                weight: 1,
+                opacity: 0.9,
+                fillColor: '#ffa502',
+                fillOpacity: 0.55
+              };
+            },
+            onEachFeature: function(feature, layer) {
+              const p = feature.properties || {};
+              const name = p.name || p.orig_name || "พื้นที่ปะการัง";
+              const area = p.gis_area_k;
+              layer.bindPopup(
+                `<b>${name}</b><br>${area ? `พื้นที่แนวปะการัง ≈ ${area.toFixed(2)} ตร.กม.` : 'พื้นที่แนวปะการัง'}`
+              );
+            }
+          }).addTo(map);
+
+          if (reefEntries.length > 0) {
+            map.fitBounds(reefLayer.getBounds());
           }
         } catch (e) {
-          console.log("Could not fit bounds:", e);
+          console.log("Could not render/fit reef layer:", e);
         }
       }
     } catch (err) {
@@ -882,23 +845,13 @@
 
   function bindMapClick() {
     try {
-      map.Event.bind(sphere.EventName.Click, (e) => {
-        const loc = extractLonLat(e);
-        if (loc) handleMapLocation(loc.lon, loc.lat);
+      map.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        handleMapLocation(lng, lat);
       });
     } catch (err) {
       console.warn('bindMapClick error', err);
     }
-  }
-
-  // The sphere click event payload shape isn't fully pinned down across
-  // versions, so this pulls lon/lat defensively from the likely spots.
-  function extractLonLat(e) {
-    if (!e) return null;
-    if (typeof e.lon === 'number' && typeof e.lat === 'number') return { lon: e.lon, lat: e.lat };
-    if (e.Location) return { lon: e.Location.lon, lat: e.Location.lat };
-    if (e.location) return { lon: e.location.lon, lat: e.location.lat };
-    return null;
   }
 
   function findNearestReef(lng, lat) {
@@ -957,15 +910,15 @@
     try {
       if (!map) return;
       if (currentMarker) {
-        map.Overlays.remove(currentMarker);
+        map.removeLayer(currentMarker);
       }
-      currentMarker = new sphere.Marker({ lon: lng, lat: lat }, {
-        icon: {
-          html: '<div style="width:16px;height:16px;border-radius:50%;background:#00d9ff;border:2px solid #0f0f10;box-shadow:0 0 8px rgba(0,217,255,0.8);"></div>',
-          offset: { x: 8, y: 8 }
-        }
-      });
-      map.Overlays.add(currentMarker);
+      currentMarker = L.circleMarker([lat, lng], {
+        radius: 8,
+        color: '#0f0f10',
+        weight: 2,
+        fillColor: '#00d9ff',
+        fillOpacity: 1
+      }).addTo(map);
     } catch (err) {
       console.warn("Marker error:", err);
     }
@@ -1097,17 +1050,14 @@
   ============================================================ */
 
   function clearRiskGrid() {
-    riskGridOverlays.forEach(o => {
-      try { map.Overlays.remove(o); } catch (e) {}
-    });
-    riskGridOverlays = [];
+    if (riskGridLayer) riskGridLayer.clearLayers();
   }
 
   function riskColor(score) {
-    if (score >= 75) return { fill: 'rgba(255, 71, 87, 0.5)', line: 'rgba(255, 71, 87, 0.9)', label: 'สูงมาก | Very High' };
-    if (score >= 50) return { fill: 'rgba(255, 111, 60, 0.45)', line: 'rgba(255, 111, 60, 0.85)', label: 'สูง | High' };
-    if (score >= 25) return { fill: 'rgba(255, 165, 2, 0.4)', line: 'rgba(255, 165, 2, 0.8)', label: 'ปานกลาง | Medium' };
-    return { fill: 'rgba(46, 213, 115, 0.35)', line: 'rgba(46, 213, 115, 0.8)', label: 'ต่ำ | Low' };
+    if (score >= 75) return { fill: '#ff4757', line: '#ff4757', label: 'สูงมาก | Very High' };
+    if (score >= 50) return { fill: '#ff6f3c', line: '#ff6f3c', label: 'สูง | High' };
+    if (score >= 25) return { fill: '#ffa502', line: '#ffa502', label: 'ปานกลาง | Medium' };
+    return { fill: '#2ed573', line: '#2ed573', label: 'ต่ำ | Low' };
   }
 
   async function showRiskArea(entry) {
@@ -1153,37 +1103,35 @@
       return;
     }
 
-    let maxScore = -1, sumScore = 0, maxCell = null;
+    let maxScore = -1, sumScore = 0;
     let stormHits = 0, freshwaterHits = 0;
 
     cells.forEach((cell, idx) => {
       const w = results[idx];
       const { score, stormScore, freshwaterScore } = computeCellRisk(w);
       sumScore += score;
-      if (score > maxScore) { maxScore = score; maxCell = cell; }
+      if (score > maxScore) { maxScore = score; }
       if (stormScore >= 25) stormHits++;
       if (freshwaterScore >= 20) freshwaterHits++;
 
       const colors = riskColor(score);
       try {
-        const rect = new sphere.Rectangle(
-          { lon: cell.cellMinLon, lat: cell.cellMaxLat },
-          { lon: cell.cellMaxLon, lat: cell.cellMinLat },
+        const rect = L.rectangle(
+          [[cell.cellMinLat, cell.cellMinLon], [cell.cellMaxLat, cell.cellMaxLon]],
           {
+            color: colors.line,
+            weight: 1,
             fillColor: colors.fill,
-            lineColor: colors.line,
-            lineWidth: 1,
-            clickable: true,
-            popup: {
-              title: `${colors.label} • ${score}/100`,
-              detail: w
-                ? `ลม ${Math.round(w.wind || 0)} km/h • ฝน ${Math.round(w.precip || 0)} mm • โอกาสฝน ${Math.round(w.precipProb || 0)}%<br>ความกดอากาศ ${Math.round(w.pressure || 0)} hPa • ความชื้น ${Math.round(w.humidity || 0)}%`
-                : 'ไม่มีข้อมูล'
-            }
+            fillOpacity: 0.4
           }
         );
-        map.Overlays.add(rect);
-        riskGridOverlays.push(rect);
+        rect.bindPopup(
+          `<b>${colors.label} • ${score}/100</b><br>` +
+          (w
+            ? `ลม ${Math.round(w.wind || 0)} km/h • ฝน ${Math.round(w.precip || 0)} mm • โอกาสฝน ${Math.round(w.precipProb || 0)}%<br>ความกดอากาศ ${Math.round(w.pressure || 0)} hPa • ความชื้น ${Math.round(w.humidity || 0)}%`
+            : 'ไม่มีข้อมูล')
+        );
+        rect.addTo(riskGridLayer);
       } catch (e) {
         console.warn('Could not render risk cell:', e);
       }
@@ -1210,8 +1158,6 @@
       const d = list[idx];
       if (!d || !d.current) return null;
 
-      // Average the next 6 hours of precipitation probability as a
-      // short-term storm/runoff outlook.
       let precipProb = null;
       if (d.hourly && Array.isArray(d.hourly.precipitation_probability)) {
         const arr = d.hourly.precipitation_probability.slice(0, 6).filter(v => typeof v === 'number');
@@ -1298,7 +1244,7 @@
         clearRiskGrid();
         setReefRiskSummary('<span class="rr-empty">คลิกบนพื้นที่ปะการังเพื่อดูพื้นที่เสี่ยง | Click a coral area to see its risk zone</span>');
         if (currentMarker) {
-          try { map.Overlays.remove(currentMarker); } catch (e) {}
+          try { map.removeLayer(currentMarker); } catch (e) {}
           currentMarker = null;
         }
         fetchWeather(9.14, 100.79);
