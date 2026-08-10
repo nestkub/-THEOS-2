@@ -150,7 +150,7 @@
 
   /* ========== SIDEBAR ========== */
   .sidebar {
-    width: 380px;
+    width: 340px;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -273,8 +273,6 @@
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
     color: var(--text-muted);
-    max-height: 200px;
-    overflow-y: auto;
   }
 
   .score-breakdown.active {
@@ -366,6 +364,54 @@
     color: var(--text-muted);
     margin-top: 2px;
     font-family: 'Prompt', sans-serif;
+  }
+
+  /* ========== LINKS SECTION ========== */
+  .quick-links {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .link-button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(42, 42, 47, 0.6);
+    border: 1px solid rgba(51, 51, 51, 0.6);
+    border-radius: 8px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Prompt', sans-serif;
+    backdrop-filter: blur(5px);
+  }
+
+  .link-button:hover {
+    background: rgba(0, 217, 255, 0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 12px rgba(0, 217, 255, 0.2);
+  }
+
+  .link-button span {
+    font-size: 14px;
+  }
+
+  .link-button-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .link-label {
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   /* ========== MODAL ========== */
@@ -467,7 +513,7 @@
 
     .sidebar {
       width: 100%;
-      max-height: 320px;
+      max-height: 280px;
       flex-direction: row;
       overflow-x: auto;
     }
@@ -500,9 +546,9 @@
 <script>
   var map;
   let coralGeoJSON = null;
-  let selectedCoral = null;
+  let lastClicked = null;
   let weatherData = null;
-  let dangerZone = null;
+  let nearestCoralName = null;
 
   // Real coral reef data from GISTDA with Thai names
   const sampleCoralData = {
@@ -584,6 +630,7 @@
         console.warn('Map library not loaded. Using CSS background fallback.');
         const dot = document.getElementById('status-dot');
         if (dot) dot.classList.add('active');
+        fetchWeather(9.14, 100.79);
         showInitialInfo();
       }
     } catch (err) {
@@ -596,10 +643,13 @@
     var dot = document.getElementById("status-dot");
     if (dot) dot.classList.add("active");
     loadCoralLayer();
+    bindMapClick();
+    fetchWeather(9.14, 100.79);
     showInitialInfo();
   }
 
   function showInitialInfo() {
+    // Show modal on first load explaining how score is calculated
     const modal = document.getElementById("info-modal");
     if (modal) {
       modal.classList.add("active");
@@ -610,7 +660,9 @@
     try {
       let coralData = null;
       
+      // Try to fetch from GISTDA
       try {
+        // Use the GISTDA WFS endpoint (version 1.0.0) as suggested
         const gistdaApi = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typename=geonode%3Acoral_reef_got_andaman_utf_8&outputFormat=json&srsName=EPSG:4326";
 
         console.log("Attempting to fetch coral data from GISTDA (v1.0.0)...");
@@ -624,6 +676,7 @@
         console.warn("Failed to fetch from GISTDA:", e.message);
       }
       
+      // Use sample data if fetch fails
       if (!coralData || !coralData.features || coralData.features.length === 0) {
         console.log("Using sample coral reef data for demonstration");
         coralData = sampleCoralData;
@@ -649,23 +702,6 @@
               onEachFeature: function(feature, layer) {
                 const name = feature.properties?.name || "พื้นที่ปะการัง";
                 layer.bindPopup(`<b>${name}</b><br>Coral Reef Area`);
-                
-                // เพิ่ม click event
-                layer.on('click', function(e) {
-                  L.DomEvent.stopPropagation(e);
-                  handleCoralClick(feature, layer);
-                });
-                
-                // เปลี่ยน cursor เมื่อ hover
-                layer.on('mouseover', function() {
-                  this.setStyle({ opacity: 1, fillOpacity: 0.8, weight: 3 });
-                  map._container.style.cursor = 'pointer';
-                });
-                
-                layer.on('mouseout', function() {
-                  this.setStyle({ opacity: 0.9, fillOpacity: 0.5, weight: 2 });
-                  map._container.style.cursor = 'default';
-                });
               }
             }).addTo(map);
             
@@ -683,65 +719,87 @@
     }
   }
 
-  function handleCoralClick(feature, layer) {
-    selectedCoral = {
-      feature: feature,
-      layer: layer,
-      name: feature.properties?.name || "ไม่ทราบ"
-    };
+  function bindMapClick() {
+    try {
+      if (window.L && map && map instanceof L.Map) {
+        map.on('click', (e) => {
+          const { lat, lng } = e.latlng;
+          handleMapLocation(lng, lat);
+        });
+      } else if (map && map.Renderer) {
+        map.Renderer.on('click', (e) => {
+          const { lng, lat } = e.lngLat;
+          handleMapLocation(lng, lat);
+        });
+      }
+    } catch (err) {
+      console.warn('bindMapClick error', err);
+    }
+  }
 
-    // อัปเดต UI
-    updateCoralInfo();
+  function handleMapLocation(lng, lat) {
+    lastClicked = [lng, lat];
 
-    // ดึงข้อมูลสภาพอากาศ
-    const centroid = turf.centroid(feature);
-    const [lng, lat] = centroid.geometry.coordinates;
+    const latEl = document.getElementById("stat-lat");
+    const lngEl = document.getElementById("stat-lng");
+    if (latEl) latEl.textContent = lat.toFixed(4);
+    if (lngEl) lngEl.textContent = lng.toFixed(4);
+
+    if (coralGeoJSON && coralGeoJSON.features && coralGeoJSON.features.length) {
+      const point = turf.point([lng, lat]);
+      let minDist = Infinity;
+      let nearestFeature = null;
+
+      coralGeoJSON.features.forEach(f => {
+        try {
+          const centroid = turf.centroid(f);
+          const d = turf.distance(point, centroid, { units: "kilometers" });
+          if (d < minDist) {
+            minDist = d;
+            nearestFeature = f;
+          }
+        } catch (_) {}
+      });
+
+      if (isFinite(minDist)) {
+        const distanceEl = document.getElementById("stat-distance");
+        if (distanceEl) {
+          distanceEl.textContent = minDist.toFixed(2) + " km";
+        }
+        
+        // Show coral name
+        nearestCoralName = nearestFeature?.properties?.name || "ไม่ทราบ";
+        const coralNameEl = document.getElementById("coral-name");
+        if (coralNameEl) {
+          coralNameEl.textContent = "📍 " + nearestCoralName;
+        }
+        
+        calculateRisk(minDist);
+      }
+    }
+
     fetchWeather(lat, lng);
-
-    // วาด 1500 km danger zone
-    drawDangerZone(centroid.geometry.coordinates);
+    addMarker(lng, lat);
   }
 
-  function updateCoralInfo() {
-    if (!selectedCoral) return;
+  function addMarker(lng, lat) {
+    try {
+      if (window.L && map && map instanceof L.Map) {
+        if (map._locationMarker) {
+          map.removeLayer(map._locationMarker);
+        }
 
-    const coralNameEl = document.getElementById("coral-name");
-    if (coralNameEl) {
-      coralNameEl.textContent = "📍 " + selectedCoral.name;
+        map._locationMarker = L.circleMarker([lat, lng], {
+          radius: 8,
+          color: '#0f0f10',
+          weight: 2,
+          fillColor: '#00d9ff',
+          fillOpacity: 1
+        }).addTo(map);
+      }
+    } catch (err) {
+      console.warn("Marker error:", err);
     }
-
-    const statusEl = document.getElementById("stat-lat");
-    const radiusEl = document.getElementById("stat-lng");
-    const modeEl = document.getElementById("stat-distance");
-    
-    if (statusEl) statusEl.textContent = "Active";
-    if (radiusEl) radiusEl.textContent = "1500 km";
-    if (modeEl) modeEl.textContent = "Weather Risk";
-  }
-
-  function drawDangerZone(coralCoords) {
-    // ลบ zone เก่า
-    if (dangerZone && dangerZone.circle) {
-      map.removeLayer(dangerZone.circle);
-    }
-
-    // วาด 1500 km radius zone (ขยายให้ใหญ่ขึ้น)
-    dangerZone = {
-      circle: L.circle([coralCoords[1], coralCoords[0]], {
-        radius: 1500 * 1000, // 1500 km เป็น meter
-        color: '#00d9ff',
-        weight: 2,
-        opacity: 0.3,
-        fillColor: '#00d9ff',
-        fillOpacity: 0.08,
-        dashArray: '5, 5'
-      }).addTo(map)
-    };
-
-    const popup = `<b>Coral Risk Analysis Zone</b><br>Radius: 1500 km<br>Risk based on weather conditions`;
-    dangerZone.circle.bindPopup(popup);
-
-    calculateRiskLevel();
   }
 
   async function fetchWeather(lat, lng) {
@@ -764,84 +822,54 @@
       if (windEl) windEl.textContent = Math.round(current.wind_speed_10m) + " km/h";
       if (pressureEl) pressureEl.textContent = Math.round(current.pressure_msl) + " hPa";
 
-      calculateRiskLevel();
+      calculateRisk();
     } catch (err) {
       console.warn("Weather error:", err);
     }
   }
 
-  function calculateRiskLevel() {
+  function calculateRisk(coralDist = null) {
     let score = 0;
     let breakdown = {
-      temperature: 0,
+      distance: 0,
       wind: 0,
       humidity: 0,
       pressure: 0
     };
 
-    // ความเสี่ยงจากทุกปัจจัยสภาพอากาศ เท่านั้น (ไม่มีระยะทาง)
-    if (weatherData) {
-      // Temperature risk
-      if (weatherData.temperature_2m > 35) {
-        breakdown.temperature = 15;
-      } else if (weatherData.temperature_2m > 32) {
-        breakdown.temperature = 10;
-      } else if (weatherData.temperature_2m > 30) {
-        breakdown.temperature = 5;
-      } else if (weatherData.temperature_2m < 10) {
-        breakdown.temperature = 8;
+    if (coralDist !== null && coralDist !== undefined) {
+      if (coralDist < 2) {
+        breakdown.distance = 40;
+      } else if (coralDist < 8) {
+        breakdown.distance = 20;
+      } else {
+        breakdown.distance = 5;
       }
-      score += breakdown.temperature;
+      score += breakdown.distance;
+    }
 
-      // Wind risk - ปัจจัยหลัก (เพิ่มน้ำหนัก)
-      if (weatherData.wind_speed_10m > 50) {
-        breakdown.wind = 50;
-      } else if (weatherData.wind_speed_10m > 40) {
-        breakdown.wind = 45;
-      } else if (weatherData.wind_speed_10m > 30) {
-        breakdown.wind = 40;
-      } else if (weatherData.wind_speed_10m > 20) {
+    if (weatherData) {
+      if (weatherData.wind_speed_10m > 20) {
         breakdown.wind = 30;
-      } else if (weatherData.wind_speed_10m > 15) {
-        breakdown.wind = 20;
       } else if (weatherData.wind_speed_10m > 10) {
-        breakdown.wind = 12;
-      } else if (weatherData.wind_speed_10m > 5) {
-        breakdown.wind = 5;
+        breakdown.wind = 15;
       }
       score += breakdown.wind;
 
-      // Humidity risk
-      if (weatherData.relative_humidity_2m > 95) {
-        breakdown.humidity = 25;
-      } else if (weatherData.relative_humidity_2m > 90) {
-        breakdown.humidity = 20;
-      } else if (weatherData.relative_humidity_2m > 80) {
+      if (weatherData.relative_humidity_2m > 85) {
         breakdown.humidity = 15;
       } else if (weatherData.relative_humidity_2m > 70) {
         breakdown.humidity = 8;
-      } else if (weatherData.relative_humidity_2m > 50) {
-        breakdown.humidity = 3;
-      } else if (weatherData.relative_humidity_2m < 30) {
-        breakdown.humidity = 10;
       }
       score += breakdown.humidity;
 
-      // Pressure risk - storm indicator (ตัวบ่งชี้พายุ)
-      if (weatherData.pressure_msl < 980) {
-        breakdown.pressure = 50; // พายุแรง/พายุหมุน
-      } else if (weatherData.pressure_msl < 990) {
-        breakdown.pressure = 40; // พายุกำลังแรง
-      } else if (weatherData.pressure_msl < 1000) {
-        breakdown.pressure = 25; // ลมแรง
-      } else if (weatherData.pressure_msl < 1010) {
-        breakdown.pressure = 10; // สภาพเปลี่ยนแปลง
-      } else if (weatherData.pressure_msl > 1030) {
-        breakdown.pressure = 3; // ความกดอากาศสูง (ปลอดภัย)
+      if (weatherData.pressure_msl < 1000) {
+        breakdown.pressure = 25;
       }
       score += breakdown.pressure;
     }
 
+    // Update score breakdown
     updateScoreBreakdown(breakdown, score);
 
     let riskTH = "ต่ำ";
@@ -850,52 +878,50 @@
     if (!badge) return;
     badge.className = "risk-badge risk-low";
 
-    if (score >= 100) {
-      riskTH = "อันตรายสูงมาก";
-      riskEN = "Very High";
-      badge.className = "risk-badge risk-high";
-    } else if (score >= 70) {
-      riskTH = "สูง";
+    if (score >= 50) {
+      riskTH = "สูงมาก";
       riskEN = "High";
       badge.className = "risk-badge risk-high";
-    } else if (score >= 40) {
+    } else if (score >= 30) {
       riskTH = "ปานกลาง";
       riskEN = "Medium";
       badge.className = "risk-badge risk-medium";
     }
 
-    badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/160`;
+    badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/100`;
   }
 
   function updateScoreBreakdown(breakdown, totalScore) {
     const breakdownEl = document.getElementById("score-breakdown");
     if (!breakdownEl) return;
 
-    let html = '<div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 217, 255, 0.3);"><strong>สภาพอากาศรวม | Weather Factors Only:</strong></div>';
-    
+    let html = '';
+    if (breakdown.distance > 0) {
+      html += `<div class="score-item"><span>ระยะถึงปะการัง | Distance:</span><span>+${breakdown.distance}</span></div>`;
+    }
     if (breakdown.wind > 0) {
       html += `<div class="score-item"><span>ความเร็วลม | Wind Speed:</span><span>+${breakdown.wind}</span></div>`;
+    }
+    if (breakdown.humidity > 0) {
+      html += `<div class="score-item"><span>ความชื้น | Humidity:</span><span>+${breakdown.humidity}</span></div>`;
     }
     if (breakdown.pressure > 0) {
       html += `<div class="score-item"><span>ความกดอากาศ | Pressure:</span><span>+${breakdown.pressure}</span></div>`;
     }
-    if (breakdown.humidity > 0) {
-      html += `<div class="score-item"><span>ความชื้นอากาศ | Humidity:</span><span>+${breakdown.humidity}</span></div>`;
-    }
-    if (breakdown.temperature > 0) {
-      html += `<div class="score-item"><span>อุณหภูมิ | Temperature:</span><span>+${breakdown.temperature}</span></div>`;
-    }
-    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0, 217, 255, 0.3);"><span><strong>รวมทั้งหมด | Total:</strong></span><span><strong>${totalScore}/160</strong></span></div>`;
+    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 4px; padding-top: 8px;"><span><strong>รวม | Total:</strong></span><span><strong>${totalScore}</strong></span></div>`;
 
     breakdownEl.innerHTML = html;
-    breakdownEl.classList.add("active");
+    
+    if (breakdown.distance > 0 || breakdown.wind > 0 || breakdown.humidity > 0 || breakdown.pressure > 0) {
+      breakdownEl.classList.add("active");
+    }
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     if (document.getElementById("btn-reset")) {
       document.getElementById("btn-reset").addEventListener("click", () => {
-        selectedCoral = null;
-        weatherData = null;
+        lastClicked = null;
+        nearestCoralName = null;
         document.getElementById("stat-lat").textContent = "—";
         document.getElementById("stat-lng").textContent = "—";
         document.getElementById("stat-distance").textContent = "—";
@@ -912,15 +938,11 @@
           rb.textContent = "ความเสี่ยง: ต่ำ | Risk: Low";
           rb.className = "risk-badge risk-low";
         }
-        
-        // ลบ danger zone
-        if (dangerZone && dangerZone.circle) {
-          map.removeLayer(dangerZone.circle);
-          dangerZone = null;
-        }
+        fetchWeather(9.14, 100.79);
       });
     }
 
+    // Close modal
     if (document.getElementById("btn-close-modal")) {
       document.getElementById("btn-close-modal").addEventListener("click", () => {
         const modal = document.getElementById("info-modal");
@@ -953,19 +975,19 @@
   <div id="map"></div>
 
   <div class="sidebar">
-    <!-- Card 1: Coral & Risk Analysis -->
+    <!-- Card 1: Location & Risk -->
     <div class="card">
-      <h2>📍 ปะการัง | Coral Reef</h2>
+      <h2>📍 ตำแหน่ง | Location</h2>
       <div class="stat-row">
-        <span class="stat-label">สถานะ | Status</span>
+        <span class="stat-label">ละติจูด | Latitude</span>
         <span class="stat-value" id="stat-lat">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">รัศมี | Radius</span>
+        <span class="stat-label">ลองจิจูด | Longitude</span>
         <span class="stat-value" id="stat-lng">—</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">โหมด | Mode</span>
+        <span class="stat-label">ระยะถึงปะการัง | Distance to Coral</span>
         <span class="stat-value" id="stat-distance">—</span>
       </div>
       <span class="coral-name" id="coral-name"></span>
@@ -979,9 +1001,9 @@
       <button class="secondary" id="btn-reset">ล้างข้อมูล | Clear</button>
     </div>
 
-    <!-- Card 2: Weather Data -->
+    <!-- Card 2: Weather -->
     <div class="card">
-      <h2>🌦️ สภาพอากาศ | Weather Conditions</h2>
+      <h2>🌦️ สภาพอากาศ | Weather</h2>
       <div class="weather-grid">
         <div class="weather-item">
           <div class="weather-icon">🌡️</div>
@@ -991,12 +1013,12 @@
         <div class="weather-item">
           <div class="weather-icon">💧</div>
           <div class="weather-value" id="humidity">—</div>
-          <div class="weather-label">ความชื้น | Humidity</div>
+          <div class="weather-label">���วามชื้น | Humidity</div>
         </div>
         <div class="weather-item">
           <div class="weather-icon">💨</div>
           <div class="weather-value" id="wind">—</div>
-          <div class="weather-label">ความเร็วลม | Wind Speed</div>
+          <div class="weather-label">ลม | Wind</div>
         </div>
         <div class="weather-item">
           <div class="weather-icon">🔵</div>
@@ -1011,20 +1033,16 @@
       <div class="modal-content">
         <h2>📊 ระบบวิเคราะห์ความเสี่ยง | Risk Analysis System</h2>
         <p>
-          ยินดีต้อนรับเข้าสู่ THEOS-2 ระบบวิเคราะห์ปะการังแบบรวมจากสภาพอากาศ
+          ยินดีต้อนรับเข้าสู่ THEOS-2 ระบบวิเคราะห์ปะการัง
         </p>
         <p>
           <strong>วิธีการใช้งาน | How to Use:</strong>
         </p>
         <ul>
-          <li>คลิกบนพื้นที่ปะการังที่ต้องการวิเคราะห์</li>
-          <li>ระบบจะแสดงโซนวิเคราะห์รัศมี 1500 กิโลเมตร</li>
-          <li>คะแนนความเสี่ยงมาจากเฉพาะสภาพอากาศเท่านั้น (ไม่ขึ้นกับระยะ):</li>
-          <li>💨 ลม: 0-50 คะแนน (ปัจจัยหลัก)</li>
-          <li>🔵 ความกดอากาศ: 0-50 คะแนน (สัญญาณพายุ)</li>
-          <li>💧 ความชื้น: 0-25 คะแนน</li>
-          <li>🌡️ อุณหภูมิ: 0-15 คะแนน</li>
-          <li>📊 คะแนนรวม: 0-160 คะแนน</li>
+          <li>คลิกบนแผนที่เพื่อเลือกตำแหน่ง</li>
+          <li>ระบบจะคำนวณระยะห่างจากปะการัง</li>
+          <li>ดูข้อมูลสภาพอากาศและคะแนนความเสี่ยง</li>
+          <li>คะแนนความเสี่ยงคำนวณจากระยะห่าง ลม ความชื้น และความกดอากาศ</li>
         </ul>
         <button class="modal-close" id="btn-close-modal">ปิด | Close</button>
       </div>
