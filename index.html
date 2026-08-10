@@ -698,7 +698,7 @@
     const [lng, lat] = centroid.geometry.coordinates;
     fetchWeather(lat, lng);
 
-    // วาด 1000 km danger zone
+    // วาด 1500 km danger zone
     drawDangerZone(centroid.geometry.coordinates);
   }
 
@@ -715,7 +715,7 @@
     const modeEl = document.getElementById("stat-distance");
     
     if (statusEl) statusEl.textContent = "Active";
-    if (radiusEl) radiusEl.textContent = "1000 km";
+    if (radiusEl) radiusEl.textContent = "1500 km";
     if (modeEl) modeEl.textContent = "Weather Risk";
   }
 
@@ -725,10 +725,10 @@
       map.removeLayer(dangerZone.circle);
     }
 
-    // วาด 1000 km radius zone
+    // วาด 1500 km radius zone (ขยายให้ใหญ่ขึ้น)
     dangerZone = {
       circle: L.circle([coralCoords[1], coralCoords[0]], {
-        radius: 1000 * 1000, // 1000 km เป็น meter
+        radius: 1500 * 1000, // 1500 km เป็น meter
         color: '#00d9ff',
         weight: 2,
         opacity: 0.3,
@@ -738,7 +738,7 @@
       }).addTo(map)
     };
 
-    const popup = `<b>Coral Risk Analysis Zone</b><br>Radius: 1000 km<br>Risk based on weather conditions`;
+    const popup = `<b>Coral Risk Analysis Zone</b><br>Radius: 1500 km<br>Risk based on weather conditions`;
     dangerZone.circle.bindPopup(popup);
 
     calculateRiskLevel();
@@ -779,51 +779,65 @@
       pressure: 0
     };
 
-    // ความเสี่ยงจากทุกปัจจัยสภาพอากาศ
+    // ความเสี่ยงจากทุกปัจจัยสภาพอากาศ เท่านั้น (ไม่มีระยะทาง)
     if (weatherData) {
       // Temperature risk
       if (weatherData.temperature_2m > 35) {
-        breakdown.temperature = 25;
-      } else if (weatherData.temperature_2m > 30) {
         breakdown.temperature = 15;
-      } else if (weatherData.temperature_2m < 15) {
+      } else if (weatherData.temperature_2m > 32) {
         breakdown.temperature = 10;
+      } else if (weatherData.temperature_2m > 30) {
+        breakdown.temperature = 5;
+      } else if (weatherData.temperature_2m < 10) {
+        breakdown.temperature = 8;
       }
       score += breakdown.temperature;
 
-      // Wind risk - ปัจจัยหลัก
-      if (weatherData.wind_speed_10m > 40) {
+      // Wind risk - ปัจจัยหลัก (เพิ่มน้ำหนัก)
+      if (weatherData.wind_speed_10m > 50) {
+        breakdown.wind = 50;
+      } else if (weatherData.wind_speed_10m > 40) {
+        breakdown.wind = 45;
+      } else if (weatherData.wind_speed_10m > 30) {
         breakdown.wind = 40;
-      } else if (weatherData.wind_speed_10m > 25) {
-        breakdown.wind = 35;
+      } else if (weatherData.wind_speed_10m > 20) {
+        breakdown.wind = 30;
       } else if (weatherData.wind_speed_10m > 15) {
         breakdown.wind = 20;
-      } else if (weatherData.wind_speed_10m > 8) {
-        breakdown.wind = 10;
+      } else if (weatherData.wind_speed_10m > 10) {
+        breakdown.wind = 12;
+      } else if (weatherData.wind_speed_10m > 5) {
+        breakdown.wind = 5;
       }
       score += breakdown.wind;
 
       // Humidity risk
-      if (weatherData.relative_humidity_2m > 90) {
+      if (weatherData.relative_humidity_2m > 95) {
+        breakdown.humidity = 25;
+      } else if (weatherData.relative_humidity_2m > 90) {
         breakdown.humidity = 20;
       } else if (weatherData.relative_humidity_2m > 80) {
         breakdown.humidity = 15;
       } else if (weatherData.relative_humidity_2m > 70) {
         breakdown.humidity = 8;
+      } else if (weatherData.relative_humidity_2m > 50) {
+        breakdown.humidity = 3;
       } else if (weatherData.relative_humidity_2m < 30) {
         breakdown.humidity = 10;
       }
       score += breakdown.humidity;
 
-      // Pressure risk - storm indicator
+      // Pressure risk - storm indicator (ตัวบ่งชี้พายุ)
       if (weatherData.pressure_msl < 980) {
-        breakdown.pressure = 35; // อันตรายสูงมาก - ลมแรง/พายุ
+        breakdown.pressure = 50; // พายุแรง/พายุหมุน
+      } else if (weatherData.pressure_msl < 990) {
+        breakdown.pressure = 40; // พายุกำลังแรง
       } else if (weatherData.pressure_msl < 1000) {
-        breakdown.pressure = 25;
+        breakdown.pressure = 25; // ลมแรง
       } else if (weatherData.pressure_msl < 1010) {
-        breakdown.pressure = 10;
+        breakdown.pressure = 10; // สภาพเปลี่ยนแปลง
       } else if (weatherData.pressure_msl > 1030) {
-        breakdown.pressure = 5; // ความกดอากาศสูง
+        breakdown.pressure = 3; // ความกดอากาศสูง (ปลอดภัย)
       }
       score += breakdown.pressure;
     }
@@ -836,42 +850,42 @@
     if (!badge) return;
     badge.className = "risk-badge risk-low";
 
-    if (score >= 70) {
+    if (score >= 100) {
       riskTH = "อันตรายสูงมาก";
       riskEN = "Very High";
       badge.className = "risk-badge risk-high";
-    } else if (score >= 50) {
+    } else if (score >= 70) {
       riskTH = "สูง";
       riskEN = "High";
       badge.className = "risk-badge risk-high";
-    } else if (score >= 30) {
+    } else if (score >= 40) {
       riskTH = "ปานกลาง";
       riskEN = "Medium";
       badge.className = "risk-badge risk-medium";
     }
 
-    badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/120`;
+    badge.textContent = `ความเสี่ยง: ${riskTH} | Risk: ${riskEN} • Score: ${score}/160`;
   }
 
   function updateScoreBreakdown(breakdown, totalScore) {
     const breakdownEl = document.getElementById("score-breakdown");
     if (!breakdownEl) return;
 
-    let html = '<div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 217, 255, 0.3);"><strong>สภาพอากาศรวม | Weather Factors:</strong></div>';
+    let html = '<div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(0, 217, 255, 0.3);"><strong>สภาพอากาศรวม | Weather Factors Only:</strong></div>';
     
-    if (breakdown.temperature > 0) {
-      html += `<div class="score-item"><span>อุณหภูมิ | Temperature:</span><span>+${breakdown.temperature}</span></div>`;
-    }
     if (breakdown.wind > 0) {
       html += `<div class="score-item"><span>ความเร็วลม | Wind Speed:</span><span>+${breakdown.wind}</span></div>`;
-    }
-    if (breakdown.humidity > 0) {
-      html += `<div class="score-item"><span>ความชื้นอากาศ | Humidity:</span><span>+${breakdown.humidity}</span></div>`;
     }
     if (breakdown.pressure > 0) {
       html += `<div class="score-item"><span>ความกดอากาศ | Pressure:</span><span>+${breakdown.pressure}</span></div>`;
     }
-    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0, 217, 255, 0.3);"><span><strong>รวมทั้งหมด | Total:</strong></span><span><strong>${totalScore}/120</strong></span></div>`;
+    if (breakdown.humidity > 0) {
+      html += `<div class="score-item"><span>ความชื้นอากาศ | Humidity:</span><span>+${breakdown.humidity}</span></div>`;
+    }
+    if (breakdown.temperature > 0) {
+      html += `<div class="score-item"><span>อุณหภูมิ | Temperature:</span><span>+${breakdown.temperature}</span></div>`;
+    }
+    html += `<div class="score-item" style="border-bottom: 1px solid rgba(0, 217, 255, 0.3); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0, 217, 255, 0.3);"><span><strong>รวมทั้งหมด | Total:</strong></span><span><strong>${totalScore}/160</strong></span></div>`;
 
     breakdownEl.innerHTML = html;
     breakdownEl.classList.add("active");
@@ -997,20 +1011,20 @@
       <div class="modal-content">
         <h2>📊 ระบบวิเคราะห์ความเสี่ยง | Risk Analysis System</h2>
         <p>
-          ยินดีต้อนรับเข้าสู่ THEOS-2 ระบบวิเคราะห์ปะการังแบบรวม
+          ยินดีต้อนรับเข้าสู่ THEOS-2 ระบบวิเคราะห์ปะการังแบบรวมจากสภาพอากาศ
         </p>
         <p>
           <strong>วิธีการใช้งาน | How to Use:</strong>
         </p>
         <ul>
           <li>คลิกบนพื้นที่ปะการังที่ต้องการวิเคราะห์</li>
-          <li>ระบบจะแสดงโซนวิเคราะห์รัศมี 1000 กิโลเมตร</li>
-          <li>คะแนนความเสี่ยงมาจากปัจจัยสภาพอากาศทั้งหมด:</li>
-          <li>🌡️ อุณหภูมิ: 0-25 คะแนน</li>
-          <li>💨 ลม: 0-40 คะแนน (ปัจจัยหลัก)</li>
-          <li>💧 ความชื้น: 0-20 คะแนน</li>
-          <li>🔵 ความกดอากาศ: 0-35 คะแนน (สัญญาณพายุ)</li>
-          <li>📊 คะแนนรวม: 0-120 คะแนน</li>
+          <li>ระบบจะแสดงโซนวิเคราะห์รัศมี 1500 กิโลเมตร</li>
+          <li>คะแนนความเสี่ยงมาจากเฉพาะสภาพอากาศเท่านั้น (ไม่ขึ้นกับระยะ):</li>
+          <li>💨 ลม: 0-50 คะแนน (ปัจจัยหลัก)</li>
+          <li>🔵 ความกดอากาศ: 0-50 คะแนน (สัญญาณพายุ)</li>
+          <li>💧 ความชื้น: 0-25 คะแนน</li>
+          <li>🌡️ อุณหภูมิ: 0-15 คะแนน</li>
+          <li>📊 คะแนนรวม: 0-160 คะแนน</li>
         </ul>
         <button class="modal-close" id="btn-close-modal">ปิด | Close</button>
       </div>
