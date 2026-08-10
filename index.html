@@ -550,8 +550,18 @@
   let weatherData = null;
   let nearestCoralName = null;
 
-  // Real coral reef data from GISTDA with Thai names
-  const sampleCoralData = {
+  // Coral reef data source: UNEP-WCMC / WorldFish / WRI / TNC (2021)
+  // "Global Distribution of Coral Reefs v4.1", queried live via ArcGIS REST
+  // and filtered to a bounding box covering Thai coastal waters.
+  const REEF_QUERY_URL =
+    'https://data-gis.unep-wcmc.org/server/rest/services/HabitatsAndBiotopes/Global_Distribution_of_Coral_Reefs/MapServer/1/query';
+
+  // Andaman coast + Gulf of Thailand. The source dataset has no country
+  // field, so this box may also catch a few reefs just across the border.
+  const REEF_BBOX = { xmin: 97.0, ymin: 5.4, xmax: 104.2, ymax: 13.9 };
+
+  // Small built-in fallback, used only if the live query fails entirely.
+  const fallbackCoralData = {
     "type": "FeatureCollection",
     "features": [
       {
@@ -596,6 +606,41 @@
       }
     ]
   };
+
+  async function fetchReefPage(offset, pageSize) {
+    const params = new URLSearchParams({
+      where: '1=1',
+      geometry: JSON.stringify({ ...REEF_BBOX, spatialReference: { wkid: 4326 } }),
+      geometryType: 'esriGeometryEnvelope',
+      inSR: '4326',
+      spatialRel: 'esriSpatialRelIntersects',
+      outFields: 'name,orig_name,gis_area_k',
+      returnGeometry: 'true',
+      outSR: '4326',
+      f: 'geojson',
+      resultRecordCount: String(pageSize),
+      resultOffset: String(offset)
+    });
+    const res = await fetch(`${REEF_QUERY_URL}?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || 'Query error');
+    return data.features || [];
+  }
+
+  async function fetchAllReefs() {
+    const pageSize = 1000;
+    let offset = 0;
+    let all = [];
+    for (let i = 0; i < 25; i++) {           // safety cap ~25,000 features
+      const feats = await fetchReefPage(offset, pageSize);
+      all = all.concat(feats);
+      console.log(`กำลังโหลดข้อมูลปะการัง... (${all.length} แปลง)`);
+      if (feats.length < pageSize) break;
+      offset += pageSize;
+    }
+    return all;
+  }
 
   function init() {
     try {
@@ -658,50 +703,44 @@
 
   async function loadCoralLayer() {
     try {
-      let coralData = null;
-      
-      // Try to fetch from GISTDA
+      let features = [];
+
       try {
-        // Use the GISTDA WFS endpoint (version 1.0.0) as suggested
-        const gistdaApi = "https://portal.marineportal.gistda.or.th/geoserver/ows?service=WFS&version=1.0.0&request=GetFeature&typename=geonode%3Acoral_reef_got_andaman_utf_8&outputFormat=json&srsName=EPSG:4326";
-
-        console.log("Attempting to fetch coral data from GISTDA (v1.0.0)...");
-        const res = await fetch(gistdaApi);
-
-        if (res.ok) {
-          coralData = await res.json();
-          console.log("✅ Coral data loaded from GISTDA:", coralData.features?.length || 0, "features");
-        }
+        console.log("Fetching live coral reef data from UNEP-WCMC...");
+        features = await fetchAllReefs();
+        console.log(`✅ Loaded ${features.length} reef features from UNEP-WCMC`);
       } catch (e) {
-        console.warn("Failed to fetch from GISTDA:", e.message);
+        console.warn("Failed to fetch UNEP-WCMC reef data:", e.message);
       }
-      
-      // Use sample data if fetch fails
-      if (!coralData || !coralData.features || coralData.features.length === 0) {
-        console.log("Using sample coral reef data for demonstration");
-        coralData = sampleCoralData;
+
+      // Use fallback data only if the live query returned nothing
+      if (features.length > 0) {
+        coralGeoJSON = { type: 'FeatureCollection', features };
+      } else {
+        console.log("Using fallback coral reef data for demonstration");
+        coralGeoJSON = fallbackCoralData;
       }
-      
-      coralGeoJSON = coralData;
 
       if (coralGeoJSON.features && coralGeoJSON.features.length > 0) {
         if (window.L && map && map instanceof L.Map) {
           if (!map._coralLayer) {
             map._coralLayer = L.geoJSON(coralGeoJSON, {
-              style: function(feature, index) {
-                const isEven = index % 2 === 0;
+              style: function() {
                 return {
-                  color: isEven ? '#87CEEB' : '#FF8C00',
-                  weight: 2,
+                  color: '#7a3a12',
+                  weight: 0.6,
                   opacity: 0.9,
-                  fillColor: isEven ? '#87CEEB' : '#FF8C00',
-                  fillOpacity: 0.5,
-                  dashArray: isEven ? '5, 5' : 'none'
+                  fillColor: '#ffa502',
+                  fillOpacity: 0.55
                 };
               },
               onEachFeature: function(feature, layer) {
-                const name = feature.properties?.name || "พื้นที่ปะการัง";
-                layer.bindPopup(`<b>${name}</b><br>Coral Reef Area`);
+                const p = feature.properties || {};
+                const name = p.name || p.orig_name || "พื้นที่ปะการัง";
+                const area = p.gis_area_k;
+                layer.bindPopup(
+                  `<b>${name}</b><br>Coral Reef Area${area ? `<br>≈ ${area.toFixed(2)} ตร.กม.` : ''}`
+                );
               }
             }).addTo(map);
             
