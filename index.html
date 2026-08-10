@@ -419,31 +419,6 @@
     color: var(--text);
   }
 
-  #tower-summary {
-    margin-top: 10px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--text-muted);
-    font-family: 'Prompt', sans-serif;
-  }
-
-  #tower-summary .rr-empty {
-    color: var(--text-muted);
-    font-style: italic;
-  }
-
-  #tower-summary .tower-item {
-    background: rgba(0, 217, 255, 0.08);
-    border: 1px solid rgba(0, 217, 255, 0.25);
-    border-radius: 6px;
-    padding: 6px 8px;
-    margin-top: 6px;
-  }
-
-  #tower-summary .tower-item strong {
-    color: var(--accent);
-  }
-
   .disclaimer {
     margin-top: 10px;
     padding: 8px;
@@ -454,13 +429,6 @@
     border: 1px solid rgba(255, 165, 2, 0.25);
     border-radius: 6px;
     font-family: 'Prompt', sans-serif;
-  }
-
-  .tower-marker-icon {
-    font-size: 20px;
-    line-height: 1;
-    text-shadow: 0 0 6px rgba(0,0,0,0.8), 0 0 3px #00d9ff;
-    filter: drop-shadow(0 0 4px rgba(0,217,255,0.9));
   }
 
   /* ========== MODAL ========== */
@@ -598,7 +566,6 @@
   let reefEntries = [];        // [{ name, area, feature, rings: [[[lon,lat],...], ...] }]
   let currentMarker = null;
   let riskGridLayer = null;    // Leaflet layerGroup for the currently-inspected reef's risk grid
-  let towerLayer = null;       // Leaflet layerGroup for suggested water-tower markers
   let weatherData = null;      // weather at the exact clicked point
   let nearestCoralName = null;
 
@@ -779,7 +746,6 @@
       }).addTo(map);
 
       riskGridLayer = L.layerGroup().addTo(map);
-      towerLayer = L.layerGroup().addTo(map);
 
       onMapReady();
     } catch (err) {
@@ -856,7 +822,7 @@
               const name = p.name || p.orig_name || "พื้นที่ปะการัง";
               const area = p.gis_area_k;
               layer.bindPopup(
-                `<b>${name}</b><br>${area ? `พื้นที่แนวปะการัง ≈ ${area.toFixed(2)} ตร.กม.` : 'พื้นที่แนวปะการัง'}<br><span style="opacity:.75">คลิกในพื้นที่นี้เพื่อดูพื้นที่เสี่ยง</span>`
+                `<b>${name}</b><br>${area ? `พื้นที่แนวปะการัง ≈ ${area.toFixed(2)} ตร.กม.` : 'พื้นที่แนวปะการัง'}`
               );
             }
           }).addTo(map);
@@ -888,16 +854,28 @@
     }
   }
 
-  // Only returns a match when the point is strictly INSIDE a reef polygon
-  // (i.e. the user clicked on the orange coral area itself).
-  function findReefContainingPoint(lng, lat) {
+  function findNearestReef(lng, lat) {
     if (!reefEntries.length) return null;
+
+    // 1) exact hit: point falls inside a reef polygon
     for (const entry of reefEntries) {
       if (pointInRings(lng, lat, entry.rings)) {
-        return entry;
+        return { entry, distanceKm: 0 };
       }
     }
-    return null;
+
+    // 2) otherwise, nearest by centroid distance
+    let best = null;
+    let bestDist = Infinity;
+    reefEntries.forEach(entry => {
+      const [clon, clat] = ringsCentroid(entry.rings);
+      const d = haversineKm(lng, lat, clon, clat);
+      if (d < bestDist) {
+        bestDist = d;
+        best = entry;
+      }
+    });
+    return best ? { entry: best, distanceKm: bestDist } : null;
   }
 
   function handleMapLocation(lng, lat) {
@@ -906,39 +884,26 @@
     if (latEl) latEl.textContent = lat.toFixed(4);
     if (lngEl) lngEl.textContent = lng.toFixed(4);
 
-    const reefHit = findReefContainingPoint(lng, lat);
+    const found = findNearestReef(lng, lat);
 
-    if (reefHit) {
-      // Clicked ON the orange coral area -> full analysis.
+    if (found) {
       const distanceEl = document.getElementById("stat-distance");
-      if (distanceEl) distanceEl.textContent = "0.00 km (อยู่ในแนวปะการัง)";
+      if (distanceEl) {
+        distanceEl.textContent = found.distanceKm.toFixed(2) + " km";
+      }
 
-      nearestCoralName = reefHit.name;
+      nearestCoralName = found.entry.name;
       const coralNameEl = document.getElementById("coral-name");
-      if (coralNameEl) coralNameEl.textContent = "📍 " + nearestCoralName;
+      if (coralNameEl) {
+        coralNameEl.textContent = "📍 " + nearestCoralName;
+      }
 
-      calculateRisk(0);
-      showRiskArea(reefHit);
-    } else {
-      // Clicked outside any reef polygon -> don't fabricate a "nearest reef"
-      // risk area. Just clear the reef-specific panels and hint at what to do.
-      clearReefPanels();
-      calculateRisk(null);
+      calculateRisk(found.distanceKm);
+      showRiskArea(found.entry);
     }
 
     fetchWeather(lat, lng);
     addMarker(lng, lat);
-  }
-
-  function clearReefPanels() {
-    nearestCoralName = null;
-    const distanceEl = document.getElementById("stat-distance");
-    if (distanceEl) distanceEl.textContent = "—";
-    const coralNameEl = document.getElementById("coral-name");
-    if (coralNameEl) coralNameEl.textContent = "";
-    clearRiskGrid();
-    setReefRiskSummary('<span class="rr-empty">คลิกบน "พื้นที่สีส้ม" (เขตปะการัง) บนแผนที่เพื่อดูพื้นที่เสี่ยง | Click the orange coral area on the map to see its risk zone</span>');
-    setTowerSummary('<span class="rr-empty">จะแนะนำตำแหน่งหอคอยฯ หลังคลิกในเขตปะการัง | Tower suggestions appear after you click inside a coral area</span>');
   }
 
   function addMarker(lng, lat) {
@@ -983,7 +948,7 @@
       if (windEl) windEl.textContent = Math.round(current.wind_speed_10m) + " km/h";
       if (pressureEl) pressureEl.textContent = Math.round(current.pressure_msl) + " hPa";
 
-      calculateRisk(nearestCoralName ? 0 : null);
+      calculateRisk();
     } catch (err) {
       console.warn("Weather error:", err);
     }
@@ -1082,16 +1047,10 @@
          probability only (Open-Meteo has no river discharge, salinity
          or plume-tracking data, so this is an estimate, not a
          measurement — see the disclaimer in the sidebar).
-     Each cell also gets a "tower suitability" score: cells with the
-     most humidity/rainfall are flagged as good candidate sites for a
-     smart fog/rain-harvesting collection tower, since intercepting
-     that water on the cells nearest the coast is the same lever that
-     drives the freshwater-runoff risk down.
   ============================================================ */
 
   function clearRiskGrid() {
     if (riskGridLayer) riskGridLayer.clearLayers();
-    if (towerLayer) towerLayer.clearLayers();
   }
 
   function riskColor(score) {
@@ -1101,22 +1060,11 @@
     return { fill: '#2ed573', line: '#2ed573', label: 'ต่ำ | Low' };
   }
 
-  function towerIcon() {
-    return L.divIcon({
-      className: 'tower-marker-icon-wrap',
-      html: '<div class="tower-marker-icon">💧🗼</div>',
-      iconSize: [24, 24],
-      iconAnchor: [12, 20],
-      popupAnchor: [0, -18]
-    });
-  }
-
   async function showRiskArea(entry) {
     if (!map || !entry) return;
 
     clearRiskGrid();
     setReefRiskSummary('<span class="rr-empty">กำลังคำนวณพื้นที่เสี่ยง... | Calculating risk area...</span>');
-    setTowerSummary('<span class="rr-empty">กำลังคำนวณตำแหน่งหอคอยฯ... | Locating tower sites...</span>');
 
     const bbox = ringsBBox(entry.rings);
     const lonSpan = Math.max(bbox.maxLon - bbox.minLon, 0.01);
@@ -1152,23 +1100,19 @@
     } catch (err) {
       console.warn("Risk grid weather fetch failed:", err);
       setReefRiskSummary('<span class="rr-empty">ไม่สามารถโหลดข้อมูลสภาพอากาศสำหรับพื้นที่นี้ได้ | Could not load weather for this area.</span>');
-      setTowerSummary('<span class="rr-empty">ไม่สามารถคำนวณตำแหน่งหอคอยฯ ได้ | Could not compute tower sites.</span>');
       return;
     }
 
     let maxScore = -1, sumScore = 0;
     let stormHits = 0, freshwaterHits = 0;
-    const towerCandidates = [];
 
     cells.forEach((cell, idx) => {
       const w = results[idx];
-      const { score, stormScore, freshwaterScore, towerScore } = computeCellRisk(w);
+      const { score, stormScore, freshwaterScore } = computeCellRisk(w);
       sumScore += score;
       if (score > maxScore) { maxScore = score; }
       if (stormScore >= 25) stormHits++;
       if (freshwaterScore >= 20) freshwaterHits++;
-
-      towerCandidates.push({ cell, w, towerScore, score });
 
       const colors = riskColor(score);
       try {
@@ -1184,7 +1128,7 @@
         rect.bindPopup(
           `<b>${colors.label} • ${score}/100</b><br>` +
           (w
-            ? `ลม ${Math.round(w.wind || 0)} km/h • ฝน ${Math.round(w.precip || 0)} mm • โอกาสฝน ${Math.round(w.precipProb || 0)}%<br>ความกดอากาศ ${Math.round(w.pressure || 0)} hPa • ความชื้น ${Math.round(w.humidity || 0)}%<br>ศักยภาพหอคอยดักน้ำ | Tower suitability: ${Math.round(towerCandidates[towerCandidates.length - 1].towerScore)}/100`
+            ? `ลม ${Math.round(w.wind || 0)} km/h • ฝน ${Math.round(w.precip || 0)} mm • โอกาสฝน ${Math.round(w.precipProb || 0)}%<br>ความกดอากาศ ${Math.round(w.pressure || 0)} hPa • ความชื้น ${Math.round(w.humidity || 0)}%`
             : 'ไม่มีข้อมูล')
         );
         rect.addTo(riskGridLayer);
@@ -1195,7 +1139,6 @@
 
     const avgScore = Math.round(sumScore / cells.length);
     renderReefRiskSummary(entry, avgScore, Math.round(maxScore), stormHits, freshwaterHits, cells.length);
-    renderTowerSuggestions(entry, towerCandidates);
   }
 
   async function fetchGridWeather(cells) {
@@ -1232,7 +1175,7 @@
   }
 
   function computeCellRisk(w) {
-    if (!w) return { score: 0, stormScore: 0, freshwaterScore: 0, towerScore: 0 };
+    if (!w) return { score: 0, stormScore: 0, freshwaterScore: 0 };
 
     let stormScore = 0;
     if (w.wind > 20) stormScore += 30;
@@ -1255,37 +1198,11 @@
     }
 
     const score = Math.min(100, stormScore + freshwaterScore);
-
-    // Tower-suitability PROXY: humidity + rain probability/intensity only
-    // (no fog-frequency, land-cover or elevation data available). A cell
-    // that is both humid and rain-prone is a good fog/rain harvesting
-    // candidate; capturing that water there is also what reduces the
-    // freshwater-runoff score, so the two are intentionally correlated.
-    let towerScore = 0;
-    const humidity = w.humidity || 0;
-    if (humidity > 85) towerScore += 40;
-    else if (humidity > 70) towerScore += 22;
-    else if (humidity > 55) towerScore += 10;
-
-    if (w.precipProb !== null) {
-      if (w.precipProb > 60) towerScore += 35;
-      else if (w.precipProb > 30) towerScore += 18;
-    }
-    if (precip > 4) towerScore += 25;
-    else if (precip > 0.5) towerScore += 12;
-
-    towerScore = Math.min(100, towerScore);
-
-    return { score, stormScore, freshwaterScore, towerScore };
+    return { score, stormScore, freshwaterScore };
   }
 
   function setReefRiskSummary(html) {
     const el = document.getElementById('reef-risk-summary');
-    if (el) el.innerHTML = html;
-  }
-
-  function setTowerSummary(html) {
-    const el = document.getElementById('tower-summary');
     if (el) el.innerHTML = html;
   }
 
@@ -1298,51 +1215,6 @@
       <div>จุดที่มีความเสี่ยงพายุ/ลมแรง | Storm-risk cells: <strong>${stormHits}/${totalCells}</strong></div>
       <div>จุดที่มีความเสี่ยงน้ำจืดไหลบ่า (ประมาณการ) | Freshwater-runoff proxy cells: <strong>${freshwaterHits}/${totalCells}</strong></div>
     `);
-  }
-
-  // Picks the top-N grid cells by tower-suitability score, drops markers
-  // for them on the map, and writes the sidebar list.
-  function renderTowerSuggestions(entry, candidates) {
-    if (towerLayer) towerLayer.clearLayers();
-
-    const usable = candidates.filter(c => c.w && c.towerScore > 0);
-    if (usable.length === 0) {
-      setTowerSummary('<span class="rr-empty">ไม่มีจุดที่เหมาะสมสำหรับหอคอยฯ ในรอบนี้ (ความชื้น/ฝนต่ำ) | No suitable tower sites this round (low humidity/rain)</span>');
-      return;
-    }
-
-    const top = usable
-      .slice()
-      .sort((a, b) => b.towerScore - a.towerScore)
-      .slice(0, 3);
-
-    let html = `<div><strong>${entry.name}</strong></div>`;
-    html += `<div style="margin-top:4px;">แนะนำ ${top.length} จุดที่มีศักยภาพดักความชื้น/น้ำฝนสูงสุด | Top ${top.length} candidate sites</div>`;
-
-    top.forEach((t, idx) => {
-      const lat = t.cell.centerLat, lon = t.cell.centerLon;
-      html += `
-        <div class="tower-item">
-          <strong>#${idx + 1} • ศักยภาพ ${Math.round(t.towerScore)}/100</strong><br>
-          ${lat.toFixed(4)}, ${lon.toFixed(4)}<br>
-          ความชื้น ${Math.round(t.w.humidity || 0)}% • โอกาสฝน ${Math.round(t.w.precipProb || 0)}%
-        </div>`;
-
-      try {
-        const marker = L.marker([lat, lon], { icon: towerIcon() });
-        marker.bindPopup(
-          `<b>💧🗼 จุดแนะนำหอคอยดักความชื้น/น้ำฝนอัจฉริยะ #${idx + 1}</b><br>` +
-          `ศักยภาพ | Suitability: <b>${Math.round(t.towerScore)}/100</b><br>` +
-          `ความชื้น ${Math.round(t.w.humidity || 0)}% • โอกาสฝน ${Math.round(t.w.precipProb || 0)}%<br>` +
-          `${lat.toFixed(4)}, ${lon.toFixed(4)}`
-        );
-        marker.addTo(towerLayer);
-      } catch (e) {
-        console.warn('Could not render tower marker:', e);
-      }
-    });
-
-    setTowerSummary(html);
   }
 
   /* ============================================================
@@ -1370,8 +1242,7 @@
           rb.className = "risk-badge risk-low";
         }
         clearRiskGrid();
-        setReefRiskSummary('<span class="rr-empty">คลิกบน "พื้นที่สีส้ม" (เขตปะการัง) บนแผนที่เพื่อดูพื้นที่เสี่ยง | Click the orange coral area on the map to see its risk zone</span>');
-        setTowerSummary('<span class="rr-empty">จะแนะนำตำแหน่งหอคอยฯ หลังคลิกในเขตปะการัง | Tower suggestions appear after you click inside a coral area</span>');
+        setReefRiskSummary('<span class="rr-empty">คลิกบนพื้นที่ปะการังเพื่อดูพื้นที่เสี่ยง | Click a coral area to see its risk zone</span>');
         if (currentMarker) {
           try { map.removeLayer(currentMarker); } catch (e) {}
           currentMarker = null;
@@ -1387,8 +1258,7 @@
       });
     }
 
-    setReefRiskSummary('<span class="rr-empty">คลิกบน "พื้นที่สีส้ม" (เขตปะการัง) บนแผนที่เพื่อดูพื้นที่เสี่ยง | Click the orange coral area on the map to see its risk zone</span>');
-    setTowerSummary('<span class="rr-empty">จะแนะนำตำแหน่งหอคอยฯ หลังคลิกในเขตปะการัง | Tower suggestions appear after you click inside a coral area</span>');
+    setReefRiskSummary('<span class="rr-empty">คลิกบนพื้นที่ปะการังเพื่อดูพื้นที่เสี่ยง | Click a coral area to see its risk zone</span>');
 
     init();
   });
@@ -1484,19 +1354,6 @@
       </div>
     </div>
 
-    <!-- Card 4: Suggested smart water-collection tower sites -->
-    <div class="card">
-      <h2>💧🗼 จุดแนะนำหอคอยดักความชื้น/น้ำฝนอัจฉริยะ | Suggested Tower Sites</h2>
-      <div class="legend-row">คลิกในพื้นที่สีส้มเพื่อคำนวณจุดที่เหมาะสมสำหรับหอคอยดักความชื้น/น้ำฝน โดยพิจารณาจากความชื้นและโอกาส/ปริมาณฝนของแต่ละเซลล์รอบแนวปะการัง</div>
-
-      <div id="tower-summary"></div>
-
-      <div class="disclaimer">
-        ตำแหน่งเป็นการประมาณจากความชื้นและข้อมูลฝนเท่านั้น ไม่ได้พิจารณาความสูงพื้นที่ ประเภทพื้นดิน หรือความเป็นเจ้าของที่ดินจริง ควรสำรวจภาคสนามก่อนก่อสร้างจริง<br>
-        Sites are a proxy from humidity/rainfall data only — no elevation, land-cover, or land-ownership data is used. Field survey required before construction.
-      </div>
-    </div>
-
     <!-- Info Modal -->
     <div class="modal" id="info-modal">
       <div class="modal-content">
@@ -1508,9 +1365,9 @@
           <strong>วิธีการใช้งาน | How to Use:</strong>
         </p>
         <ul>
-          <li>คลิก "บนพื้นที่สีส้ม" (เขตปะการัง) บนแผนที่เพื่อเลือกตำแหน่ง — การคลิกนอกพื้นที่สีส้มจะไม่แสดงพื้นที่เสี่ยง</li>
-          <li>เมื่อคลิกในแนวปะการัง ระบบจะวาดตารางพื้นที่เสี่ยงรอบแนวปะการังนั้น โดยประเมินจากลม ความกดอากาศ และโอกาส/ปริมาณฝน (เป็นตัวแทนความเสี่ยงพายุและน้ำจืดไหลบ่า)</li>
-          <li>ระบบจะแนะนำจุดที่เหมาะสมสำหรับสร้างหอคอยดักความชื้น/น้ำฝนอัจฉริยะ โดยเลือกจากเซลล์ที่มีความชื้นและโอกาสฝนสูงสุดในบริเวณนั้น</li>
+          <li>คลิกบนแผนที่หรือบนพื้นที่ปะการังเพื่อเลือกตำแหน่ง</li>
+          <li>ระบบจะคำนวณระยะห่างจากปะการังที่ใกล้ที่สุด</li>
+          <li>เมื่อคลิกใกล้แนวปะการัง ระบบจะวาดตารางพื้นที่เสี่ยงรอบแนวปะการังนั้น โดยประเมินจากลม ความกดอากาศ และโอกาส/ปริมาณฝน (เป็นตัวแทนความเสี่ยงพายุและน้ำจืดไหลบ่า)</li>
           <li>ดูข้อมูลสภาพอากาศและคะแนนความเสี่ยงของจุดที่คลิก</li>
         </ul>
         <button class="modal-close" id="btn-close-modal">ปิด | Close</button>
