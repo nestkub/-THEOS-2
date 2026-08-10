@@ -140,7 +140,7 @@
     height: 100%;
     border-radius: 12px;
     background: linear-gradient(180deg, #0a0e12 0%, #1a1a1e 100%),
-                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill=[...]')
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="%230a0e12"/><circle cx="100" cy="100" r="1" fill="%23ffffff" opacity="0.1"/></svg>');
     background-size: cover;
     background-position: center;
     border: 1px solid var(--border);
@@ -812,10 +812,15 @@
 
       weatherData = current;
 
-      document.getElementById("temp").textContent = Math.round(current.temperature_2m) + "°C";
-      document.getElementById("humidity").textContent = current.relative_humidity_2m + "%";
-      document.getElementById("wind").textContent = Math.round(current.wind_speed_10m) + " km/h";
-      document.getElementById("pressure").textContent = Math.round(current.pressure_msl) + " hPa";
+      const tempEl = document.getElementById("temp");
+      const humidityEl = document.getElementById("humidity");
+      const windEl = document.getElementById("wind");
+      const pressureEl = document.getElementById("pressure");
+
+      if (tempEl) tempEl.textContent = Math.round(current.temperature_2m) + "°C";
+      if (humidityEl) humidityEl.textContent = current.relative_humidity_2m + "%";
+      if (windEl) windEl.textContent = Math.round(current.wind_speed_10m) + " km/h";
+      if (pressureEl) pressureEl.textContent = Math.round(current.pressure_msl) + " hPa";
 
       calculateRisk();
     } catch (err) {
@@ -999,3 +1004,51 @@
     <!-- Card 2: Weather -->
     <div class="card">
       <h2>🌦️ สภาพอากาศ | Weather</h2>
+      <div class="weather-grid">
+        <div class="weather-item">
+          <div class="weather-icon">🌡️</div>
+          <div class="weather-value" id="temp">—</div>
+          <div class="weather-label">อุณหภูมิ | Temperature</div>
+        </div>
+        <div class="weather-item">
+          <div class="weather-icon">💧</div>
+          <div class="weather-value" id="humidity">—</div>
+          <div class="weather-label">���วามชื้น | Humidity</div>
+        </div>
+        <div class="weather-item">
+          <div class="weather-icon">💨</div>
+          <div class="weather-value" id="wind">—</div>
+          <div class="weather-label">ลม | Wind</div>
+        </div>
+        <div class="weather-item">
+          <div class="weather-icon">🔵</div>
+          <div class="weather-value" id="pressure">—</div>
+          <div class="weather-label">ความกดอากาศ | Pressure</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Info Modal -->
+    <div class="modal" id="info-modal">
+      <div class="modal-content">
+        <h2>📊 ระบบวิเคราะห์ความเสี่ยง | Risk Analysis System</h2>
+        <p>
+          ยินดีต้อนรับเข้าสู่ THEOS-2 ระบบวิเคราะห์ปะการัง
+        </p>
+        <p>
+          <strong>วิธีการใช้งาน | How to Use:</strong>
+        </p>
+        <ul>
+          <li>คลิกบนแผนที่เพื่อเลือกตำแหน่ง</li>
+          <li>ระบบจะคำนวณระยะห่างจากปะการัง</li>
+          <li>ดูข้อมูลสภาพอากาศและคะแนนความเสี่ยง</li>
+          <li>คะแนนความเสี่ยงคำนวณจากระยะห่าง ลม ความชื้น และความกดอากาศ</li>
+        </ul>
+        <button class="modal-close" id="btn-close-modal">ปิด | Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
